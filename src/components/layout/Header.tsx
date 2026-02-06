@@ -1,0 +1,235 @@
+import type React from 'react';
+import { Link, useLocation } from 'react-router';
+import { Newspaper, Settings, Zap, FileText, Globe, Bot, Layers } from 'lucide-react';
+import { cn } from '../../design/theme';
+
+interface HeaderProps {
+  apiKey: string;
+  onOpenSettings: () => void;
+}
+
+export function Header({ apiKey, onOpenSettings }: HeaderProps) {
+  const location = useLocation();
+
+  return (
+    <header className="relative bg-stone-50 dark:bg-stone-950 amoled:bg-black border-b border-stone-200 dark:border-stone-800 amoled:border-stone-900 sticky top-0 z-50">
+      {/* Subtle top accent line */}
+      <div
+        className="absolute top-0 left-0 right-0 h-[2px]"
+        style={{ background: 'linear-gradient(90deg, transparent 0%, #E34234 20%, #E34234 80%, transparent 100%)' }}
+      />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        {/* Main header row */}
+        <div className="flex items-center justify-between h-16 sm:h-20">
+
+          {/* Logo & Masthead */}
+          <Link
+            to="/"
+            className="group flex items-center gap-2 sm:gap-3 md:gap-4 shrink-0"
+          >
+            {/* Icon mark */}
+            <div className="relative">
+              <div className={cn(
+                "w-9 h-9 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-lg sm:rounded-xl flex items-center justify-center",
+                "bg-stone-900 dark:bg-stone-100",
+                "shadow-lg shadow-stone-900/20 dark:shadow-black/30",
+                "transition-all duration-300 ease-out",
+                "group-hover:shadow-xl group-hover:shadow-stone-900/30 dark:group-hover:shadow-black/40",
+                "group-hover:-translate-y-0.5 group-hover:rotate-[-2deg]"
+              )}>
+                <Newspaper
+                  className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-stone-100 dark:text-stone-900"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+              </div>
+
+              {/* Live indicator dot */}
+              <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-2.5 h-2.5 sm:w-3 sm:h-3">
+                <span
+                  className={cn(
+                    "absolute inset-0 rounded-full",
+                    apiKey
+                      ? "bg-emerald-500 animate-pulse"
+                      : "bg-amber-500 animate-pulse"
+                  )}
+                  style={{ animationDuration: '2s' }}
+                />
+                <span
+                  className={cn(
+                    "absolute inset-[2px] rounded-full",
+                    apiKey ? "bg-emerald-400" : "bg-amber-400"
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Brand text */}
+            <div className="flex flex-col">
+              <h1
+                className={cn(
+                  "text-base sm:text-xl md:text-2xl tracking-tight",
+                  "text-stone-900 dark:text-stone-100",
+                  "transition-colors duration-200",
+                  "group-hover:text-stone-700 dark:group-hover:text-white"
+                )}
+                style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+              >
+                <span className="font-semibold">Gemini</span>
+                {' '}
+                <em className="font-normal italic">OCR</em>
+              </h1>
+
+              {/* Tagline - hidden on mobile */}
+              <div className="hidden md:flex items-center gap-2 mt-0.5">
+                <span
+                  className="text-[11px] tracking-[0.15em] uppercase text-stone-400 dark:text-stone-500"
+                  style={{ fontFamily: "'Source Sans 3', sans-serif" }}
+                >
+                  Powered by Gemini 3
+                </span>
+              </div>
+            </div>
+          </Link>
+
+          {/* Right side: Nav + Settings */}
+          <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
+
+            {/* Desktop Navigation */}
+            <nav
+              id="main-navigation"
+              className="hidden md:flex items-center gap-1 p-1.5 rounded-2xl bg-stone-100/80 dark:bg-stone-900/80 amoled:bg-stone-950/80 border border-stone-200/60 dark:border-stone-800/60"
+              role="navigation"
+              aria-label="Main navigation"
+            >
+              <NavLink to="/" isActive={location.pathname === '/'} icon={FileText}>
+                Simple
+              </NavLink>
+              <NavLink to="/web" isActive={location.pathname === '/web'} icon={Globe}>
+                Web
+              </NavLink>
+              <NavLink to="/advanced" isActive={location.pathname === '/advanced'} icon={Layers}>
+                Bulk
+              </NavLink>
+              <NavLink to="/agentic" isActive={location.pathname === '/agentic'} icon={Bot}>
+                Agent
+              </NavLink>
+            </nav>
+
+            {/* Mobile Navigation - Compact pills */}
+            <nav
+              className="flex md:hidden items-center gap-0.5 p-0.5 rounded-lg bg-stone-100/80 dark:bg-stone-900/80 border border-stone-200/60 dark:border-stone-800/60"
+              role="navigation"
+              aria-label="Main navigation"
+            >
+              <MobileNavLink to="/" isActive={location.pathname === '/'}>
+                <FileText className="w-3.5 h-3.5" />
+              </MobileNavLink>
+              <MobileNavLink to="/web" isActive={location.pathname === '/web'}>
+                <Globe className="w-3.5 h-3.5" />
+              </MobileNavLink>
+              <MobileNavLink to="/advanced" isActive={location.pathname === '/advanced'}>
+                <Layers className="w-3.5 h-3.5" />
+              </MobileNavLink>
+              <MobileNavLink to="/agentic" isActive={location.pathname === '/agentic'}>
+                <Bot className="w-3.5 h-3.5" />
+              </MobileNavLink>
+            </nav>
+
+            {/* Settings Button */}
+            <button
+              id="settings-button"
+              onClick={onOpenSettings}
+              className={cn(
+                "relative flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium",
+                "transition-all duration-200 ease-out",
+                "focus:outline-none focus:ring-2 focus:ring-offset-2",
+                "active:scale-95",
+                !apiKey
+                  ? "px-2.5 py-2 sm:px-4 sm:py-2.5 bg-gradient-to-b from-[#E34234] to-[#C9352A] text-white shadow-lg shadow-[#E34234]/30 hover:shadow-xl hover:shadow-[#E34234]/40 hover:-translate-y-0.5 focus:ring-[#E34234]/50 border border-[#E34234]"
+                  : "p-2 sm:px-3 sm:py-2.5 bg-white dark:bg-stone-900 amoled:bg-stone-950 text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-stone-700 amoled:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 amoled:hover:bg-stone-900 hover:text-stone-900 dark:hover:text-stone-200 hover:border-stone-300 dark:hover:border-stone-600 focus:ring-stone-500/30 shadow-sm hover:shadow"
+              )}
+              style={{ fontFamily: "'Source Sans 3', sans-serif" }}
+              aria-label={!apiKey ? "Add API Key" : "Open settings"}
+            >
+              {!apiKey ? (
+                <>
+                  <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">Add API Key</span>
+                </>
+              ) : (
+                <Settings className="w-4 h-4" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+interface NavLinkProps {
+  to: string;
+  isActive: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}
+
+function NavLink({ to, isActive, icon: Icon, children }: NavLinkProps) {
+  return (
+    <Link
+      to={to}
+      className={cn(
+        "relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium",
+        "transition-all duration-200 ease-out",
+        "focus:outline-none focus:ring-2 focus:ring-stone-500/20",
+        isActive
+          ? "bg-white dark:bg-stone-800 amoled:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-sm border border-stone-200/50 dark:border-stone-700/50"
+          : "text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200 hover:bg-white/50 dark:hover:bg-stone-800/50"
+      )}
+      style={{ fontFamily: "'Source Sans 3', sans-serif" }}
+      aria-current={isActive ? 'page' : undefined}
+    >
+      <Icon className={cn(
+        "w-4 h-4 transition-colors",
+        isActive
+          ? "text-stone-700 dark:text-stone-300"
+          : "text-stone-400 dark:text-stone-500"
+      )} />
+      <span>{children}</span>
+
+      {/* Active indicator bar */}
+      {isActive && (
+        <span
+          className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full"
+          style={{ backgroundColor: '#E34234' }}
+        />
+      )}
+    </Link>
+  );
+}
+
+interface MobileNavLinkProps {
+  to: string;
+  isActive: boolean;
+  children: React.ReactNode;
+}
+
+function MobileNavLink({ to, isActive, children }: MobileNavLinkProps) {
+  return (
+    <Link
+      to={to}
+      className={cn(
+        "flex items-center justify-center w-9 h-9 rounded-md",
+        "transition-all duration-200",
+        isActive
+          ? "bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 shadow-sm"
+          : "text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 hover:bg-white/50 dark:hover:bg-stone-800/50"
+      )}
+      aria-current={isActive ? 'page' : undefined}
+    >
+      {children}
+    </Link>
+  );
+}

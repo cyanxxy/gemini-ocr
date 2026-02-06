@@ -1,0 +1,70 @@
+/**
+ * This module provides utilities for file validation and reading files as Data URLs.
+ * It ensures files meet specific size and type constraints before processing.
+ */
+
+import { logger } from './logger';
+
+/** Maximum allowed file size in bytes (20MB) */
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
+
+/**
+ * Validates a file based on its size and MIME type.
+ * Allowed types are images (e.g., `image/png`, `image/jpeg`) and PDFs (`application/pdf`).
+ * The maximum file size is 20MB.
+ *
+ * @param file - The {@link File} object to validate.
+ * @returns An object containing a `valid` boolean and an optional `error` message string if validation fails.
+ */
+export function validateFile(file: File | null | undefined): { valid: boolean; error?: string } {
+  // Check if file exists
+  if (!file) {
+    return {
+      valid: false,
+      error: 'No file provided.'
+    };
+  }
+
+  // Check file size
+  if (file.size > MAX_FILE_SIZE) {
+    return {
+      valid: false,
+      error: `File "${file.name}" exceeds the maximum size of 20MB.`
+    };
+  }
+
+  // Check file type
+  if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+    return {
+      valid: false,
+      error: `File "${file.name}" is of an unsupported type. Only images and PDFs are allowed.`
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Reads the contents of a {@link File} object and returns it as a Data URL string.
+ *
+ * @param file - The {@link File} object to read.
+ * @returns A Promise that resolves with the file's content as a Data URL string.
+ * @throws Rejects the promise if the file reading fails or if the result is not a string.
+ */
+export async function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Invalid file data'));
+        return;
+      }
+      resolve(reader.result);
+    };
+    reader.onerror = (event) => {
+      logger.error('FileReader error:', event);
+      reject(new Error('Failed to read file: ' + (event.target?.error?.message || 'Unknown error')));
+    };
+    reader.readAsDataURL(file);
+  });
+}

@@ -1,0 +1,178 @@
+/**
+ * Type definitions for the Gemini OCR system
+ * Extracted from the monolithic gemini.ts file for better organization
+ */
+
+/**
+ * Represents the content extracted from a document, organized into a title and sections.
+ */
+export interface ExtractedContent {
+  /** The main title of the document, if found */
+  title?: string;
+  /** An array of sections, each containing a heading and content lines */
+  sections: {
+    /** The heading for this section */
+    heading?: string;
+    /** An array of strings, where each string is a line of content within the section */
+    content: string[];
+  }[];
+  /** The full content as a single string */
+  content?: string;
+  /** Extracted headings from the document */
+  headings?: string[];
+  /** Extracted tables from the document */
+  tables?: Array<{
+    headers: string[];
+    rows: string[][];
+    content: string;
+  }>;
+  /** Extracted code blocks */
+  code?: string[];
+  /** Extracted lists */
+  lists?: Array<{
+    type: 'ordered' | 'unordered';
+    items: string[];
+  }>;
+  /** The content formatted as markdown */
+  markdown?: string;
+}
+
+/**
+ * Options to configure extraction behavior
+ */
+export interface ExtractionOptions {
+  /** If true, attempts to output structured data in JSON format */
+  structuredOutput?: boolean;
+  /** Specifies the predominant handwriting style */
+  handwritingStyle?: 'general' | 'cursive' | 'print' | 'mixed';
+  /** Controls the output format */
+  outputFormat?: 'markdown' | 'json';
+  /** If true, enables image detection */
+  detectImages?: boolean;
+  /** If true, enables math equation detection */
+  detectMathEquations?: boolean;
+  /** Level of detail for image descriptions */
+  imageDetailLevel?: 'minimal' | 'standard' | 'detailed';
+  /** Temperature setting for the model */
+  temperature?: number;
+  /** Maximum number of tokens to generate */
+  maxTokens?: number;
+  /** Model name to use */
+  model?: string;
+  /** Abort signal to cancel the request */
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * Instruction for guiding the extraction process
+ */
+export interface ExtractionInstruction {
+  /** Optional title for the instruction set */
+  title?: string;
+  /** The specific prompt or instruction */
+  prompt: string;
+}
+
+/**
+ * Callbacks for streaming operations
+ */
+export interface StreamingCallbacks {
+  /** Called when streaming starts */
+  onStart?: () => void;
+  /** Called for each chunk of data */
+  onProgress?: (chunk: string) => void;
+  /** Called when streaming completes */
+  onComplete?: (content: ExtractedContent) => void;
+  /** Called if an error occurs */
+  onError?: (error: Error) => void;
+}
+
+/**
+ * Rule for extracting specific fields
+ */
+export interface ExtractionRule {
+  /** Unique identifier for the rule */
+  id: string;
+  /** Name of the field to extract */
+  field: string;
+  /** Description or instruction for extraction */
+  description: string;
+  /** Expected type of the extracted value */
+  type: 'text' | 'number' | 'date' | 'list' | 'boolean' | 'currency' | 'email' | 'url' | 'phone';
+  /** Whether this field is required */
+  required?: boolean;
+  /** Pattern to match (regex) */
+  pattern?: string;
+  /** Example value */
+  example?: string;
+}
+
+/**
+ * Available Gemini models (Gemini 3 only)
+ */
+export type GeminiModel =
+  | 'gemini-3-pro-preview'
+  | 'gemini-3-flash-preview';
+
+/**
+ * Thinking levels for Gemini 3 models (use the SDK enum or uppercase strings)
+ * - MINIMAL: Lightest reasoning (Gemini 3 Flash only)
+ * - LOW: Light reasoning, faster response
+ * - MEDIUM: Balanced reasoning (Gemini 3 Flash only)
+ * - HIGH: Full reasoning capabilities (default)
+ *
+ * Note: According to official Gemini API docs:
+ * - Gemini 3 Pro supports: 'LOW', 'HIGH'
+ * - Gemini 3 Flash supports: 'MINIMAL', 'LOW', 'MEDIUM', 'HIGH'
+ * - Thinking isn't fully disabled for Gemini 3; MINIMAL is the lightest setting
+ */
+export type ThinkingLevel = 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
+
+/**
+ * Configuration for thinking mode (Gemini 3 only)
+ * Uses `thinkingLevel` to control reasoning depth
+ * Note: Thinking isn't fully disabled for Gemini 3; MINIMAL is the lightest setting
+ */
+export interface ThinkingConfig {
+  /** Thinking level - 'MINIMAL'/'LOW'/'MEDIUM'/'HIGH' (availability depends on model) */
+  level: ThinkingLevel;
+  /** Whether to include thinking content in the response */
+  includeThoughts?: boolean;
+}
+
+/**
+ * Client configuration for Gemini API calls
+ * Used for dependency injection to avoid coupling to global state
+ */
+export interface GeminiClientConfig {
+  /** The Gemini API key */
+  apiKey: string;
+  /** The model to use */
+  model: GeminiModel;
+  /** Optional thinking configuration */
+  thinkingConfig?: ThinkingConfig;
+}
+
+/**
+ * Error types for OCR operations
+ */
+export enum OcrErrorType {
+  API_KEY_MISSING = 'API_KEY_MISSING',
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  RATE_LIMIT = 'RATE_LIMIT',
+  INVALID_RESPONSE = 'INVALID_RESPONSE'
+}
+
+/**
+ * Custom error class for OCR operations
+ */
+export class OcrError extends Error {
+  constructor(
+    public type: OcrErrorType,
+    message: string,
+    public details?: unknown
+  ) {
+    super(message);
+    this.name = 'OcrError';
+  }
+}

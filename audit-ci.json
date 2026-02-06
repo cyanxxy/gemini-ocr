@@ -1,0 +1,16 @@
+{
+  "moderate": true,
+  "high": true,
+  "critical": true,
+  "allowlist": [],
+  "report-type": "summary",
+  "skip-dev": false,
+  "show-found": true,
+  "retry": {
+    "count": 5,
+    "factor": 2,
+    "minTimeout": 10000,
+    "maxTimeout": 60000,
+    "randomize": true
+  }
+} 
