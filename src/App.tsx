@@ -14,7 +14,14 @@ const AdvancedOCR = lazy(() => import('./pages/AdvancedOCR').then(module => ({ d
 const AgenticOCR = lazy(() => import('./pages/AgenticOCR').then(module => ({ default: module.default })));
 
 function App() {
-  const { apiKey, setApiKey, theme, setTheme, model, setModel, thinkingConfig, updateThinkingConfig } = useSettingsStore();
+  const apiKey = useSettingsStore(s => s.apiKey);
+  const setApiKey = useSettingsStore(s => s.setApiKey);
+  const theme = useSettingsStore(s => s.theme);
+  const setTheme = useSettingsStore(s => s.setTheme);
+  const model = useSettingsStore(s => s.model);
+  const setModel = useSettingsStore(s => s.setModel);
+  const thinkingConfig = useSettingsStore(s => s.thinkingConfig);
+  const updateThinkingConfig = useSettingsStore(s => s.updateThinkingConfig);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showBanner, setShowBanner] = useState(!apiKey);
 

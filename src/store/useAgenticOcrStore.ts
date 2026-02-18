@@ -107,6 +107,8 @@ interface AgenticOcrState {
   functionCalls: AgentFunctionCall[];
   /** Whether content has been copied to clipboard */
   isCopied: boolean;
+  /** Timeout ID for copy notification cleanup */
+  copyTimeoutId: ReturnType<typeof setTimeout> | null;
   /** AbortController for cancelling agent operations */
   abortController: AbortController | null;
 
@@ -229,6 +231,7 @@ export const useAgenticOcrStore = create<AgenticOcrState>((set, get) => ({
   config: DEFAULT_CONFIG,
   functionCalls: [],
   isCopied: false,
+  copyTimeoutId: null,
   abortController: null,
 
   startAgent: async (file: File, imageData: string, configOverrides?: Partial<AgentConfig>) => {
@@ -495,24 +498,12 @@ export const useAgenticOcrStore = create<AgenticOcrState>((set, get) => ({
   },
 
   updateField: (key: string, result: FieldResult) => {
-    
-    set(state => {
-      const newState = {
-        extractedFields: {
-          ...state.extractedFields,
-          [key]: result,
-        },
-      };
-      return newState;
-    });
-
-    // Also update in document memory
-    get().updateDocumentMemory({
+    set(state => ({
       extractedFields: {
-        ...get().documentMemory?.extractedFields,
+        ...state.extractedFields,
         [key]: result,
       },
-    });
+    }));
 
     get().addLog({
       type: 'info',
@@ -522,14 +513,20 @@ export const useAgenticOcrStore = create<AgenticOcrState>((set, get) => ({
   },
 
   recordFunctionCall: (functionCall: Omit<AgentFunctionCall, 'timestamp'>) => {
+    const MAX_FUNCTION_CALLS = 200;
     const newFunctionCall: AgentFunctionCall = {
       ...functionCall,
       timestamp: Date.now(),
     };
 
-    set(state => ({
-      functionCalls: [...state.functionCalls, newFunctionCall],
-    }));
+    set(state => {
+      const updated = [...state.functionCalls, newFunctionCall];
+      return {
+        functionCalls: updated.length > MAX_FUNCTION_CALLS
+          ? updated.slice(-MAX_FUNCTION_CALLS)
+          : updated,
+      };
+    });
 
     get().addLog({
       type: 'function_call',
@@ -539,10 +536,15 @@ export const useAgenticOcrStore = create<AgenticOcrState>((set, get) => ({
   },
 
   copyToClipboard: async () => {
-    const { extractedFields } = get();
-    
+    const { extractedFields, copyTimeoutId } = get();
+
     if (Object.keys(extractedFields).length === 0) {
       return;
+    }
+
+    // Clear any existing timeout
+    if (copyTimeoutId) {
+      clearTimeout(copyTimeoutId);
     }
 
     // Format extracted fields for clipboard
@@ -552,8 +554,10 @@ export const useAgenticOcrStore = create<AgenticOcrState>((set, get) => ({
 
     try {
       await navigator.clipboard.writeText(content);
-      set({ isCopied: true });
-      setTimeout(() => set({ isCopied: false }), 2000);
+      const newTimeoutId = setTimeout(() => {
+        set({ isCopied: false, copyTimeoutId: null });
+      }, 2000);
+      set({ isCopied: true, copyTimeoutId: newTimeoutId });
 
       get().addLog({
         type: 'info',
@@ -570,8 +574,14 @@ export const useAgenticOcrStore = create<AgenticOcrState>((set, get) => ({
   },
 
   reset: () => {
-    // Abort any pending operations before reset
-    const { abortController } = get();
+    const { abortController, copyTimeoutId } = get();
+
+    // Clean up timeout
+    if (copyTimeoutId) {
+      clearTimeout(copyTimeoutId);
+    }
+
+    // Abort any pending operations
     if (abortController) {
       abortController.abort();
     }
@@ -589,6 +599,7 @@ export const useAgenticOcrStore = create<AgenticOcrState>((set, get) => ({
       config: DEFAULT_CONFIG,
       functionCalls: [],
       isCopied: false,
+      copyTimeoutId: null,
       abortController: null,
     });
   },

@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { AlertCircle, Loader, Archive, Layers, Sparkles } from 'lucide-react';
-import { shallow } from 'zustand/shallow';
 
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAdvancedOcrStore } from '../store/useAdvancedOcrStore';
@@ -54,40 +53,20 @@ export default function AdvancedOCR() {
   // --- Store Hooks ---
   const apiKey = useSettingsStore(state => state.apiKey);
 
-  const {
-    files,
-    processedResults,
-    isProcessing,
-    error,
-    progress,
-    isCopied,
-    copiedResults,
-    addFiles,
-    removeFile,
-    cancelProcessing,
-    processFiles: processStoreFiles,
-    copyToClipboard: copyAllToClipboardStore,
-    copyResultToClipboard: copySingleResultToClipboardStore,
-    reset: resetAdvancedOcrStore,
-  } = useAdvancedOcrStore(
-    (state) => ({
-      files: state.files,
-      processedResults: state.processedResults,
-      isProcessing: state.isProcessing,
-      error: state.error,
-      progress: state.progress,
-      isCopied: state.isCopied,
-      copiedResults: state.copiedResults,
-      addFiles: state.addFiles,
-      removeFile: state.removeFile,
-      cancelProcessing: state.cancelProcessing,
-      processFiles: state.processFiles,
-      copyToClipboard: state.copyToClipboard,
-      copyResultToClipboard: state.copyResultToClipboard,
-      reset: state.reset,
-    }),
-    shallow
-  );
+  const files = useAdvancedOcrStore(s => s.files);
+  const processedResults = useAdvancedOcrStore(s => s.processedResults);
+  const isProcessing = useAdvancedOcrStore(s => s.isProcessing);
+  const error = useAdvancedOcrStore(s => s.error);
+  const progress = useAdvancedOcrStore(s => s.progress);
+  const isCopied = useAdvancedOcrStore(s => s.isCopied);
+  const copiedResults = useAdvancedOcrStore(s => s.copiedResults);
+  const addFiles = useAdvancedOcrStore(s => s.addFiles);
+  const removeFile = useAdvancedOcrStore(s => s.removeFile);
+  const cancelProcessing = useAdvancedOcrStore(s => s.cancelProcessing);
+  const processStoreFiles = useAdvancedOcrStore(s => s.processFiles);
+  const copyAllToClipboardStore = useAdvancedOcrStore(s => s.copyToClipboard);
+  const copySingleResultToClipboardStore = useAdvancedOcrStore(s => s.copyResultToClipboard);
+  const resetAdvancedOcrStore = useAdvancedOcrStore(s => s.reset);
 
   // Store cleanup on unmount
   useStoreCleanup({ cancelProcessing, reset: resetAdvancedOcrStore }, 'AdvancedOcrStore');
