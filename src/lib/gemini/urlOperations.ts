@@ -170,11 +170,11 @@ export async function extractTextFromUrlsProgressive(
         const errorMessage = `Unable to extract content from URLs. 
 
 This feature requires:
-• A model that supports URL context (Gemini 3 Pro/Flash or Gemini 2.5 Pro/Flash/Flash-Lite)
+• A model that supports URL context (Gemini 3.1 Pro / Gemini 3 Flash or Gemini 2.5 Pro/Flash/Flash-Lite)
 • API key with URL context permissions
 • Valid, publicly accessible URLs
 
-Note: This app currently exposes Gemini 3 models only.
+Note: This app currently exposes Gemini 3.1 Pro and Gemini 3 Flash preview models.
 The URL context feature may not be available in your region or with your current API key.`;
         
         if (analysisMode === 'individual') {

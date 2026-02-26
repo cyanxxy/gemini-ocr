@@ -98,17 +98,17 @@ function processMarkdownIntoExtractedContent(
 }
 
 /**
- * Build generation configuration for Gemini 3 API calls
+ * Build generation configuration for Gemini preview API calls
  */
 function buildGenerationConfig(
   modelName: GeminiModel,
   options?: ExtractionOptions,
   thinkingConfig?: { level: 'LOW' | 'MEDIUM' | 'HIGH'; includeThoughts?: boolean }
 ): Record<string, unknown> {
-  // Gemini 3 defaults to temperature 1.0; keep unless you have a reason to tune
+  // Gemini preview models default to temperature 1.0; keep unless you have a reason to tune
   let config: Record<string, unknown> = {
     temperature: options?.temperature ?? 1.0,
-    maxOutputTokens: options?.maxTokens ?? (modelName === 'gemini-3-pro-preview' ? 65536 : 65536),
+    maxOutputTokens: options?.maxTokens ?? (modelName === 'gemini-3.1-pro-preview' ? 65536 : 65536),
     topP: 0.95,
     topK: modelName === 'gemini-3-flash-preview' ? 64 : 40
   };
@@ -121,7 +121,7 @@ function buildGenerationConfig(
     config.abortSignal = options.abortSignal;
   }
 
-  // Apply thinking configuration for Gemini 3
+  // Apply thinking configuration for Gemini preview models
   config = applyThinkingConfig(config, modelName, thinkingConfig);
 
   return config;

@@ -61,8 +61,8 @@ export function SettingsModal({
   }, [isOpen, initialApiKey, initialTheme, initialModel, initialThinkingConfig]);
 
   useEffect(() => {
-    if (model === 'gemini-3-pro-preview' &&
-        (thinkingConfig.level === 'MINIMAL' || thinkingConfig.level === 'MEDIUM')) {
+    if (model === 'gemini-3.1-pro-preview' &&
+        thinkingConfig.level === 'MINIMAL') {
       setThinkingConfig((prev) => ({ ...prev, level: 'HIGH' }));
     }
   }, [model, thinkingConfig.level]);
@@ -204,7 +204,7 @@ export function SettingsModal({
             <div className="space-y-2 mt-2">
               {([
                 { value: 'gemini-3-flash-preview' as ModelType, label: 'Gemini 3 Flash', badge: 'Fast', icon: Zap },
-                { value: 'gemini-3-pro-preview' as ModelType, label: 'Gemini 3 Pro', badge: 'Best', icon: Sparkles },
+                { value: 'gemini-3.1-pro-preview' as ModelType, label: 'Gemini 3.1 Pro', badge: 'Best', icon: Sparkles },
               ]).map(({ value, label, badge, icon: Icon }) => (
                 <button
                   key={value}
@@ -291,11 +291,11 @@ export function SettingsModal({
           {/* Reasoning Level */}
           <section>
             <label className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wide">Reasoning</label>
-            <div className={cn("grid gap-2 mt-2", model === 'gemini-3-flash-preview' ? "grid-cols-4" : "grid-cols-2")}>
+            <div className={cn("grid gap-2 mt-2", model === 'gemini-3-flash-preview' ? "grid-cols-4" : "grid-cols-3")}>
               {[
                 ...(model === 'gemini-3-flash-preview' ? [{ value: 'MINIMAL' as const, label: 'Min', emoji: '🌱' }] : []),
                 { value: 'LOW' as const, label: 'Low', emoji: '⚡' },
-                ...(model === 'gemini-3-flash-preview' ? [{ value: 'MEDIUM' as const, label: 'Med', emoji: '⚖️' }] : []),
+                { value: 'MEDIUM' as const, label: 'Med', emoji: '⚖️' },
                 { value: 'HIGH' as const, label: 'High', emoji: '🧠' },
               ].map((opt) => (
                 <button

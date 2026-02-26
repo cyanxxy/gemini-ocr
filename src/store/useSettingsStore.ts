@@ -8,10 +8,10 @@ import type { ThinkingLevel } from '../lib/gemini/types';
 export type { ThinkingLevel };
 
 /**
- * Defines the available Gemini model types that the user can select (Gemini 3 only).
+ * Defines the available Gemini preview model types that the user can select.
  */
 export type ModelType =
-  | 'gemini-3-pro-preview'
+  | 'gemini-3.1-pro-preview'
   | 'gemini-3-flash-preview';
 
 /**
@@ -20,9 +20,9 @@ export type ModelType =
 export type ThemeMode = 'light' | 'dark' | 'amoled';
 
 /**
- * Thinking mode configuration for Gemini 3 models
+ * Thinking mode configuration for Gemini preview models
  * Uses `level` ('MINIMAL'/'LOW'/'MEDIUM'/'HIGH' depending on model support)
- * Note: Thinking isn't fully disabled for Gemini 3; MINIMAL is the lightest setting
+ * Note: Thinking isn't fully disabled for Gemini preview models; MINIMAL is the lightest setting
  */
 export interface ThinkingConfig {
   /** Thinking level - availability depends on the selected model */
@@ -49,7 +49,7 @@ interface SettingsState {
   handwritingMode: boolean;
   /** The currently active {@link ThemeMode} for the application. */
   theme: ThemeMode;
-  /** Thinking mode configuration for Gemini 3 models */
+  /** Thinking mode configuration for Gemini preview models */
   thinkingConfig: ThinkingConfig;
 
   /**
@@ -119,7 +119,7 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
       setModel: (model: ModelType) => {
-        const validModels: ModelType[] = ['gemini-3-pro-preview', 'gemini-3-flash-preview'];
+        const validModels: ModelType[] = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview'];
         if (validModels.includes(model)) {
           set({ model });
         }
@@ -136,7 +136,7 @@ export const useSettingsStore = create<SettingsState>()(
         const isFlash = state.model === 'gemini-3-flash-preview';
         const allowed: ThinkingLevel[] = isFlash
           ? ['MINIMAL', 'LOW', 'MEDIUM', 'HIGH']
-          : ['LOW', 'HIGH'];
+          : ['LOW', 'MEDIUM', 'HIGH'];
         const rawLevel = config.level ?? state.thinkingConfig.level;
         const normalized = typeof rawLevel === 'string'
           ? rawLevel.toUpperCase()
@@ -173,10 +173,15 @@ export const useSettingsStore = create<SettingsState>()(
 
           try {
             // Validate and clean up the rehydrated state
-            const validModels: ModelType[] = ['gemini-3-pro-preview', 'gemini-3-flash-preview'];
+            const validModels: ModelType[] = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview'];
             const validThemes: ThemeMode[] = ['light', 'dark', 'amoled'];
 
-            // Validate model - migrate old models to Gemini 3 Flash
+            // Validate model - migrate legacy Gemini 3 Pro to Gemini 3.1 Pro
+            if (state.model === 'gemini-3-pro-preview') {
+              state.model = 'gemini-3.1-pro-preview';
+            }
+
+            // Validate model - migrate unknown models to Gemini 3 Flash
             if (!validModels.includes(state.model)) {
               state.model = 'gemini-3-flash-preview';
             }
@@ -191,7 +196,7 @@ export const useSettingsStore = create<SettingsState>()(
               state.handwritingMode = false;
             }
 
-            // Validate thinking configuration (Gemini 3 levels)
+            // Validate thinking configuration levels
             const validLevels: ThinkingLevel[] = ['MINIMAL', 'LOW', 'MEDIUM', 'HIGH'];
             if (!state.thinkingConfig || typeof state.thinkingConfig !== 'object') {
               state.thinkingConfig = {
@@ -224,8 +229,8 @@ export const useSettingsStore = create<SettingsState>()(
             }
 
             // Clamp thinking level based on selected model
-            if (state.model === 'gemini-3-pro-preview' &&
-                (state.thinkingConfig.level === 'MINIMAL' || state.thinkingConfig.level === 'MEDIUM')) {
+            if (state.model === 'gemini-3.1-pro-preview' &&
+                state.thinkingConfig.level === 'MINIMAL') {
               state.thinkingConfig.level = 'HIGH';
             }
 

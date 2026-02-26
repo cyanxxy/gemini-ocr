@@ -215,11 +215,11 @@ export function getModelClient(
  * Check if a model is a Gemini 3 model
  */
 export function isGemini3Model(modelName: GeminiModel): boolean {
-  return modelName === 'gemini-3-pro-preview' || modelName === 'gemini-3-flash-preview';
+  return modelName === 'gemini-3.1-pro-preview' || modelName === 'gemini-3-flash-preview';
 }
 
 /**
- * Apply thinking configuration for Gemini 3 models
+ * Apply thinking configuration for Gemini preview models
  * @param generationConfig - The base generation config
  * @param modelName - The model name
  * @param thinkingConfig - The thinking configuration
@@ -227,9 +227,9 @@ export function isGemini3Model(modelName: GeminiModel): boolean {
  *
  * Note: According to official Gemini API documentation:
  * - Use the SDK's ThinkingLevel enum (or equivalent uppercase strings)
- * - Gemini 3 Pro supports: 'LOW', 'HIGH'
+ * - Gemini 3.1 Pro supports: 'LOW', 'MEDIUM', 'HIGH'
  * - Gemini 3 Flash supports: 'MINIMAL', 'LOW', 'MEDIUM', 'HIGH'
- * - Thinking isn't fully disabled for Gemini 3; MINIMAL is the lightest setting
+ * - Thinking isn't fully disabled for Gemini preview models; MINIMAL is the lightest setting
  */
 export function applyThinkingConfig(
   generationConfig: Record<string, unknown>,
@@ -241,7 +241,7 @@ export function applyThinkingConfig(
   const isFlash = modelName === 'gemini-3-flash-preview';
   const allowed = isFlash
     ? (['MINIMAL', 'LOW', 'MEDIUM', 'HIGH'] as const)
-    : (['LOW', 'HIGH'] as const);
+    : (['LOW', 'MEDIUM', 'HIGH'] as const);
   const level = (allowed as readonly string[]).includes(normalized) ? normalized : 'HIGH';
 
   return {

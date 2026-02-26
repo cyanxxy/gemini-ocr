@@ -108,30 +108,30 @@ export interface ExtractionRule {
 }
 
 /**
- * Available Gemini models (Gemini 3 only)
+ * Available Gemini preview models
  */
 export type GeminiModel =
-  | 'gemini-3-pro-preview'
+  | 'gemini-3.1-pro-preview'
   | 'gemini-3-flash-preview';
 
 /**
- * Thinking levels for Gemini 3 models (use the SDK enum or uppercase strings)
+ * Thinking levels for Gemini preview models (use the SDK enum or uppercase strings)
  * - MINIMAL: Lightest reasoning (Gemini 3 Flash only)
  * - LOW: Light reasoning, faster response
- * - MEDIUM: Balanced reasoning (Gemini 3 Flash only)
+ * - MEDIUM: Balanced reasoning
  * - HIGH: Full reasoning capabilities (default)
  *
  * Note: According to official Gemini API docs:
- * - Gemini 3 Pro supports: 'LOW', 'HIGH'
+ * - Gemini 3.1 Pro supports: 'LOW', 'MEDIUM', 'HIGH'
  * - Gemini 3 Flash supports: 'MINIMAL', 'LOW', 'MEDIUM', 'HIGH'
- * - Thinking isn't fully disabled for Gemini 3; MINIMAL is the lightest setting
+ * - Thinking isn't fully disabled for Gemini preview models; MINIMAL is the lightest setting
  */
 export type ThinkingLevel = 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
 
 /**
- * Configuration for thinking mode (Gemini 3 only)
+ * Configuration for thinking mode (Gemini preview models only)
  * Uses `thinkingLevel` to control reasoning depth
- * Note: Thinking isn't fully disabled for Gemini 3; MINIMAL is the lightest setting
+ * Note: Thinking isn't fully disabled for Gemini preview models; MINIMAL is the lightest setting
  */
 export interface ThinkingConfig {
   /** Thinking level - 'MINIMAL'/'LOW'/'MEDIUM'/'HIGH' (availability depends on model) */

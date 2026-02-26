@@ -218,7 +218,7 @@ ${urls.map((url, i) => `${i + 1}. ${url}`).join('\n')}
 2. Suggestions for extracting text from these types of sources
 3. Common text extraction challenges for these content types
 
-Note: To actually extract content from these URLs, please ensure you're using a model that supports URL context (Gemini 3 Pro/Flash or Gemini 2.5 Pro/Flash/Flash-Lite).`;
+Note: To actually extract content from these URLs, please ensure you're using a model that supports URL context (Gemini 3.1 Pro / Gemini 3 Flash or Gemini 2.5 Pro/Flash/Flash-Lite).`;
   } else if (analysisMode === 'combined') {
     prompt += `Please provide guidance on:
 1. How to combine content from multiple web sources
@@ -259,7 +259,7 @@ Note: Direct URL access requires a model with URL context support.`;
   const responseText = result.response.text();
   
   // Return appropriate structure based on mode with clear error messaging
-  const errorNote = 'Direct URL access not available. Please ensure:\n1. You\'re using a model that supports URL context (Gemini 3 Pro/Flash or Gemini 2.5 Pro/Flash/Flash-Lite)\n2. Your API key has access to URL context features\n\nNote: This app currently exposes Gemini 3 models only.\n\n';
+  const errorNote = 'Direct URL access not available. Please ensure:\n1. You\'re using a model that supports URL context (Gemini 3.1 Pro / Gemini 3 Flash or Gemini 2.5 Pro/Flash/Flash-Lite)\n2. Your API key has access to URL context features\n\nNote: This app currently exposes Gemini 3.1 Pro and Gemini 3 Flash preview models.\n\n';
   
   if (analysisMode === 'individual') {
     const results: UrlResult[] = urls.map(url => ({

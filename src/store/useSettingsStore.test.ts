@@ -70,8 +70,8 @@ describe('useSettingsStore', () => {
 
   describe('setModel', () => {
     it('accepts valid model values', () => {
-      useSettingsStore.getState().setModel('gemini-3-pro-preview');
-      expect(useSettingsStore.getState().model).toBe('gemini-3-pro-preview');
+      useSettingsStore.getState().setModel('gemini-3.1-pro-preview');
+      expect(useSettingsStore.getState().model).toBe('gemini-3.1-pro-preview');
     });
 
     it('ignores invalid model values', () => {
