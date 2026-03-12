@@ -1,0 +1,8 @@
+{
+  "suiteAssertions": [
+    {
+      "type": "overall_score_min",
+      "value": 0.75
+    }
+  ]
+}

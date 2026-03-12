@@ -1,0 +1,44 @@
+title: "[Eval failure] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report AI eval misses, regressions, or suspicious outputs here.
+        This template is used when the repository has a Discussions category with the slug `eval-failures`.
+  - type: input
+    id: eval_case
+    attributes:
+      label: Eval case ID
+      description: Which case failed?
+      placeholder: invoice-template
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: Which model produced the failure?
+      placeholder: gemini-3-flash-preview
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed output
+      description: Paste the failing excerpt or describe the regression.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should the model have returned?
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Extra notes
+      description: Include prompt tweaks, document quirks, or reproduction hints.

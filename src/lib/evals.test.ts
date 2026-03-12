@@ -1,0 +1,177 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildEvalSummary,
+  evaluateEvalCase,
+  renderEvalSummaryMarkdown,
+  validateEvalCase,
+  validateEvalSuiteConfig,
+} from './evals';
+
+describe('eval utilities', () => {
+  it('validates a template eval case', () => {
+    const evalCase = validateEvalCase({
+      id: 'invoice-template',
+      mode: 'template',
+      inputPath: 'evals/corpus/invoice.pdf',
+      presetId: 'invoice',
+      expectedAssertions: [
+        { type: 'json_field_exists', path: 'fields.invoice_number.value' },
+        { type: 'pass_rate_weight', value: 2 },
+      ],
+      tags: ['invoice', 'template'],
+    });
+
+    expect(evalCase.id).toBe('invoice-template');
+    expect(evalCase.presetId).toBe('invoice');
+  });
+
+  it('normalizes legacy ocr mode and validates agentic config', () => {
+    const simpleCase = validateEvalCase({
+      id: 'simple-resume',
+      mode: 'ocr',
+      inputPath: 'evals/corpus/resume.pdf',
+      expectedAssertions: [
+        { type: 'contains', target: 'markdown', value: 'Jordan Lee' },
+      ],
+      tags: ['resume', 'simple'],
+    });
+
+    const agenticCase = validateEvalCase({
+      id: 'agentic-business-card',
+      mode: 'agentic',
+      inputPath: 'evals/corpus/business-card.pdf',
+      agentConfig: {
+        maxIterations: 4,
+        confidenceThreshold: 0.65,
+      },
+      expectedAssertions: [
+        { type: 'json_field_exists', path: 'extractedFields.email.value' },
+      ],
+      tags: ['business-card', 'agentic'],
+    });
+
+    expect(simpleCase.mode).toBe('simple');
+    expect(agenticCase.mode).toBe('agentic');
+    expect(agenticCase.agentConfig?.maxIterations).toBe(4);
+  });
+
+  it('rejects invalid eval cases', () => {
+    expect(() => validateEvalCase({
+      id: 'broken',
+      mode: 'template',
+      inputPath: '',
+      expectedAssertions: [],
+      tags: [],
+    })).toThrow(/inputPath/);
+
+    expect(() => validateEvalCase({
+      id: 'broken-agentic',
+      mode: 'agentic',
+      inputPath: 'evals/corpus/invoice.pdf',
+      agentConfig: {
+        confidenceThreshold: 2,
+      },
+      expectedAssertions: [
+        { type: 'json_field_exists', path: 'extractedFields.invoice_number.value' },
+      ],
+      tags: ['agentic'],
+    })).toThrow(/confidenceThreshold/);
+  });
+
+  it('evaluates assertions against structured output', () => {
+    const evalCase = validateEvalCase({
+      id: 'receipt-template',
+      mode: 'template',
+      inputPath: 'evals/corpus/receipt.pdf',
+      presetId: 'receipt',
+      expectedAssertions: [
+        { type: 'contains', target: 'markdown', value: 'Market Street Grocer' },
+        { type: 'json_field_equals', path: 'fields.total.value', expected: '27.00' },
+        { type: 'table_min_rows', minRows: 2 },
+      ],
+      tags: ['receipt'],
+    });
+
+    const result = evaluateEvalCase(evalCase, {
+      markdown: '# Receipt\n\nMerchant: Market Street Grocer',
+      csv: 'item,quantity,price\nApples,2,4.00\nMilk,1,3.50',
+      json: {
+        fields: {
+          total: {
+            value: '27.00',
+          },
+        },
+        rows: [
+          { item: 'Apples', quantity: '2', price: '4.00' },
+          { item: 'Milk', quantity: '1', price: '3.50' },
+        ],
+      },
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.failedAssertions).toHaveLength(0);
+    expect(result.weight).toBe(1);
+  });
+
+  it('treats missing JSON paths and undefined values differently', () => {
+    const evalCase = validateEvalCase({
+      id: 'agentic-output',
+      mode: 'agentic',
+      inputPath: 'evals/corpus/invoice.pdf',
+      expectedAssertions: [
+        { type: 'json_field_exists', path: 'extractedFields.total_amount.value' },
+        { type: 'json_field_equals', path: 'documentType', expected: 'invoice' },
+      ],
+      tags: ['agentic'],
+    });
+
+    const result = evaluateEvalCase(evalCase, {
+      markdown: '# Agentic OCR Extraction',
+      json: {
+        documentType: 'invoice',
+        extractedFields: {
+          total_amount: {
+            value: '1471.50',
+          },
+        },
+      },
+    });
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('builds summaries and renders markdown reports', () => {
+    const summary = buildEvalSummary(
+      'gemini-3-flash-preview',
+      [
+        { id: 'invoice', passed: true, weight: 2, failedAssertions: [] },
+        { id: 'resume', passed: false, weight: 1, failedAssertions: ['Expected JSON path "fields.email.value" to exist.'] },
+      ],
+      validateEvalSuiteConfig({
+        suiteAssertions: [
+          { type: 'overall_score_min', value: 0.8 },
+        ],
+      }),
+    );
+
+    const markdown = renderEvalSummaryMarkdown(summary);
+
+    expect(summary.weightedScore).toBeCloseTo(2 / 3);
+    expect(summary.status).toBe('failed');
+    expect(markdown).toContain('# AI Eval Report');
+    expect(markdown).toContain('resume');
+    expect(markdown).toContain('Weighted score 0.67 is below required threshold 0.80.');
+  });
+
+  it('falls back to pass rate when all eval weights are zero', () => {
+    const summary = buildEvalSummary(
+      'gemini-3-flash-preview',
+      [
+        { id: 'case-1', passed: true, weight: 0, failedAssertions: [] },
+        { id: 'case-2', passed: false, weight: 0, failedAssertions: ['failed'] },
+      ],
+    );
+
+    expect(summary.weightedScore).toBe(0.5);
+  });
+});

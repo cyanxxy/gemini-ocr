@@ -1,0 +1,34 @@
+title: "[Show & tell] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share a preset, workflow, or output you built with Open Gemini OCR.
+        This template is picked up when the repository has a Discussions category with the slug `show-and-tell`.
+  - type: input
+    id: preset
+    attributes:
+      label: Preset or workflow
+      description: Which shipped preset or custom workflow are you showing?
+      placeholder: invoice / receipt / resume / business-card / custom
+    validations:
+      required: true
+  - type: textarea
+    id: what_you_built
+    attributes:
+      label: What you built
+      description: Describe the extraction flow and why it is useful.
+      placeholder: We used the invoice preset to extract accounts payable PDFs into JSON and CSV.
+    validations:
+      required: true
+  - type: textarea
+    id: artifact
+    attributes:
+      label: Output sample
+      description: Paste a small JSON, markdown, or CSV snippet if you can share one.
+      render: markdown
+  - type: textarea
+    id: lessons
+    attributes:
+      label: Lessons learned
+      description: What worked well or what would you change?

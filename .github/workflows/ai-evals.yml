@@ -1,0 +1,62 @@
+name: AI Evals
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  run-evals:
+    name: Run AI Evals
+    runs-on: ubuntu-latest
+    if: github.repository == 'cyanxxy/open-Gemini-ocr'
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate eval fixtures
+        run: npm run evals:validate
+
+      - name: Skip live evals when Gemini API key is missing
+        if: ${{ env.GEMINI_API_KEY == '' }}
+        run: echo "GEMINI_API_KEY is not configured; skipping live evals."
+
+      - name: Run live evals
+        if: ${{ env.GEMINI_API_KEY != '' }}
+        run: npm run evals
+        env:
+          GEMINI_MODEL: gemini-3-flash-preview
+
+      - name: Refresh markdown report
+        if: ${{ env.GEMINI_API_KEY != '' }}
+        run: npm run evals:report
+
+      - name: Commit updated eval reports
+        if: ${{ env.GEMINI_API_KEY != '' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- evals/reports/latest.json evals/reports/latest.md; then
+            echo "No eval report changes to commit."
+            exit 0
+          fi
+          git add evals/reports/latest.json evals/reports/latest.md
+          git commit -m "chore: refresh AI eval reports"
+          git push

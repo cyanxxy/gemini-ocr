@@ -1,0 +1,18 @@
+{
+  "id": "agentic-business-card",
+  "mode": "agentic",
+  "inputPath": "evals/corpus/business-card.pdf",
+  "agentConfig": {
+    "maxIterations": 4,
+    "confidenceThreshold": 0.65
+  },
+  "expectedAssertions": [
+    { "type": "json_field_equals", "path": "documentType", "expected": "business card" },
+    { "type": "json_field_exists", "path": "normalizedFields.email.value" },
+    { "type": "json_field_exists", "path": "normalizedFields.company_name.value" },
+    { "type": "contains", "target": "markdown", "value": "Orbit Partners" },
+    { "type": "contains", "target": "markdown", "value": "https://orbitpartners.com" },
+    { "type": "pass_rate_weight", "value": 1 }
+  ],
+  "tags": ["business-card", "agentic", "record"]
+}

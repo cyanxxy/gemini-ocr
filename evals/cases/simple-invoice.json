@@ -1,0 +1,12 @@
+{
+  "id": "simple-invoice",
+  "mode": "simple",
+  "inputPath": "evals/corpus/invoice.pdf",
+  "expectedAssertions": [
+    { "type": "contains", "target": "markdown", "value": "Northwind Supply Co." },
+    { "type": "contains", "target": "markdown", "value": "INV-2026-0142" },
+    { "type": "contains", "target": "markdown", "value": "1471.50" },
+    { "type": "pass_rate_weight", "value": 1 }
+  ],
+  "tags": ["invoice", "simple", "markdown"]
+}

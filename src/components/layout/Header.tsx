@@ -1,6 +1,6 @@
 import type React from 'react';
 import { Link, useLocation } from 'react-router';
-import { Newspaper, Settings, Zap, FileText, Globe, Bot, Layers } from 'lucide-react';
+import { Newspaper, Settings, Zap, FileText, Globe, Bot, Layers, BadgeCheck } from 'lucide-react';
 import { cn } from '../../design/theme';
 
 interface HeaderProps {
@@ -106,6 +106,9 @@ export function Header({ apiKey, onOpenSettings }: HeaderProps) {
               <NavLink to="/" isActive={location.pathname === '/'} icon={FileText}>
                 Simple
               </NavLink>
+              <NavLink to="/templates" isActive={location.pathname === '/templates'} icon={BadgeCheck}>
+                Templates
+              </NavLink>
               <NavLink to="/web" isActive={location.pathname === '/web'} icon={Globe}>
                 Web
               </NavLink>
@@ -125,6 +128,9 @@ export function Header({ apiKey, onOpenSettings }: HeaderProps) {
             >
               <MobileNavLink to="/" isActive={location.pathname === '/'}>
                 <FileText className="w-3.5 h-3.5" />
+              </MobileNavLink>
+              <MobileNavLink to="/templates" isActive={location.pathname === '/templates'}>
+                <BadgeCheck className="w-3.5 h-3.5" />
               </MobileNavLink>
               <MobileNavLink to="/web" isActive={location.pathname === '/web'}>
                 <Globe className="w-3.5 h-3.5" />

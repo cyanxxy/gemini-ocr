@@ -9,6 +9,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Lazy load page components
 const SimpleOCR = lazy(() => import('./pages/SimpleOCR').then(module => ({ default: module.default })));
+const TemplatesOCR = lazy(() => import('./pages/TemplatesOCR').then(module => ({ default: module.default })));
 const WebOCR = lazy(() => import('./pages/WebOCR').then(module => ({ default: module.default })));
 const AdvancedOCR = lazy(() => import('./pages/AdvancedOCR').then(module => ({ default: module.default })));
 const AgenticOCR = lazy(() => import('./pages/AgenticOCR').then(module => ({ default: module.default })));
@@ -87,6 +88,7 @@ function App() {
           <Suspense fallback={<div className="p-8 flex justify-center"><LoadingIndicator size="lg" text="Loading page..." /></div>}>
             <Routes>
               <Route path="/" element={<SimpleOCR />} />
+              <Route path="/templates" element={<TemplatesOCR />} />
               <Route path="/web" element={<WebOCR />} />
               <Route path="/advanced" element={<AdvancedOCR />} />
               <Route path="/agentic" element={<AgenticOCR />} />

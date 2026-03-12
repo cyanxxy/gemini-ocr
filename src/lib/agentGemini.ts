@@ -1,9 +1,8 @@
 import { GoogleGenAI, FunctionDeclaration, FunctionCallingConfigMode, type Content, type Part } from '@google/genai';
-import { useSettingsStore } from '../store/useSettingsStore';
 import { logger } from './logger';
 import { applyThinkingConfig } from './gemini/client';
-import type { GeminiModel } from './gemini/types';
 import {
+  AgentClientConfig,
   AgentFunctionCall,
   AgentLoopConfig,
   AgentMemory,
@@ -13,6 +12,7 @@ import {
   AgentTurnResult
 } from './agentTypes';
 import { applyMemoryUpdate } from './agentLoop';
+import { buildAgentSchemaGuidance, getAgentReadiness } from './agentSchema';
 
 // Type for Gemini API configuration
 type GeminiApiConfig = {
@@ -32,16 +32,26 @@ type GeminiApiConfig = {
 
 import {
   executeReOcrRegion,
-  executeExtractField,
-  executeValidateExtraction,
+  executeExtractFieldsBatch,
   executeAnalyzeDocumentStructure,
-  executeFinalizeExtraction
 } from './agentTools';
 
 /**
  * Maximum number of inner rounds within a single turn to prevent infinite tool-calling loops
  */
 const MAX_INNER_ROUNDS = 10;
+
+function extractModelText(content?: Content): string {
+  if (!content?.parts) {
+    return '';
+  }
+
+  return content.parts
+    .map((part) => ('text' in part && typeof part.text === 'string' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
 
 /**
  * Execute a full agent turn with multi-turn function calling.
@@ -57,25 +67,24 @@ export async function executeAgentTurn(
   fileData: string,
   mimeType: string,
   memory: AgentMemory,
+  clientConfig: AgentClientConfig,
   config: AgentLoopConfig,
   onStep: StepCallback
 ): Promise<AgentTurnResult> {
-  const { apiKey } = useSettingsStore.getState();
-  if (!apiKey) {
+  if (!clientConfig.apiKey) {
     throw new Error('Please set your API key in settings');
   }
 
-  const genAI = new GoogleGenAI({ apiKey });
-  const { thinkingConfig } = useSettingsStore.getState();
-  const modelName = (config.model || 'gemini-3-flash-preview') as GeminiModel;
+  const genAI = new GoogleGenAI({ apiKey: clientConfig.apiKey });
+  const modelName = clientConfig.model;
 
   // Build generation config
   let generationConfig: Record<string, unknown> = {
-    temperature: 1.0,
+    temperature: config.temperature,
     topP: 0.95,
     maxOutputTokens: config.maxTokens || 4096,
   };
-  generationConfig = applyThinkingConfig(generationConfig, modelName, thinkingConfig);
+  generationConfig = applyThinkingConfig(generationConfig, modelName, clientConfig.thinkingConfig);
 
   const apiConfig: GeminiApiConfig = {
     ...generationConfig,
@@ -97,13 +106,18 @@ export async function executeAgentTurn(
   const allSteps: AgentStep[] = [];
 
   for (let round = 0; round < MAX_INNER_ROUNDS; round++) {
+    if (clientConfig.abortSignal?.aborted) {
+      throw new Error('Agent processing cancelled');
+    }
+
     // Call the Gemini API
     const response = await genAI.models.generateContent({
-      model: config.model || 'gemini-3-flash-preview',
+      model: clientConfig.model,
       contents: workingContents,
       config: {
         ...apiConfig,
         systemInstruction: systemPrompt,
+        ...(clientConfig.abortSignal ? { abortSignal: clientConfig.abortSignal } : {}),
       }
     });
 
@@ -114,7 +128,7 @@ export async function executeAgentTurn(
     }
 
     // Yield thinking steps from text response
-    const responseText = response.text || '';
+    const responseText = extractModelText(modelContent);
     if (responseText) {
       const thinkingStep: AgentStep = {
         type: 'thinking',
@@ -146,51 +160,51 @@ export async function executeAgentTurn(
       break;
     }
 
-    // Execute each function call and build function response parts
-    const functionResponseParts: Part[] = [];
-
-    for (const fc of functionCalls) {
-      const callStep: AgentStep = {
-        type: 'function_call',
-        content: `Executing: ${fc.name}`,
-        functionCall: fc,
+    if (functionCalls.length > 1) {
+      const sequencingStep: AgentStep = {
+        type: 'thinking',
+        content: `Model requested ${functionCalls.length} tool calls in one round; enforcing sequential execution.`,
         timestamp: Date.now(),
       };
-      onStep(callStep);
-      allSteps.push(callStep);
-
-      const result = await executeFunctionCall(fc, fileData, mimeType, memory);
-      applyMemoryUpdate(memory, result.memoryUpdate);
-
-      const resultStep: AgentStep = {
-        type: 'result',
-        content: `${fc.name} completed`,
-        functionCall: fc,
-        functionResult: result,
-        timestamp: Date.now(),
-      };
-      onStep(resultStep);
-      allSteps.push(resultStep);
-
-      // Build FunctionResponse part for this call
-      functionResponseParts.push({
-        functionResponse: {
-          name: fc.name,
-          response: { output: result.data ?? { success: result.success, error: result.error } },
-        }
-      });
-
-      // If finalize_extraction was called, we're done
-      if (fc.name === 'finalize_extraction') {
-        // Still need to add the function responses to history for completeness
-        workingContents.push({ role: 'user', parts: functionResponseParts });
-        return {
-          updatedContents: workingContents,
-          finished: true,
-          steps: allSteps,
-        };
-      }
+      onStep(sequencingStep);
+      allSteps.push(sequencingStep);
     }
+
+    const fc = functionCalls[0];
+    const callStep: AgentStep = {
+      type: 'function_call',
+      content: `Executing: ${fc.name}`,
+      functionCall: fc,
+      timestamp: Date.now(),
+    };
+    onStep(callStep);
+    allSteps.push(callStep);
+
+    const result = await executeFunctionCall(fc, fileData, mimeType, memory, clientConfig);
+    applyMemoryUpdate(memory, result.memoryUpdate);
+
+    const resultStep: AgentStep = {
+      type: 'result',
+      content: result.success ? `${fc.name} completed` : `${fc.name} returned an error`,
+      functionCall: fc,
+      functionResult: result,
+      timestamp: Date.now(),
+    };
+    onStep(resultStep);
+    allSteps.push(resultStep);
+
+    const functionResponseParts: Part[] = [{
+      functionResponse: {
+        name: fc.name,
+        response: {
+          output: {
+            success: result.success,
+            error: result.error ?? null,
+            data: result.data ?? null,
+          }
+        },
+      }
+    }];
 
     // Send all function results back to Gemini as a user turn with functionResponse parts
     workingContents.push({ role: 'user', parts: functionResponseParts });
@@ -211,26 +225,21 @@ export async function executeFunctionCall(
   functionCall: AgentFunctionCall,
   fileData: string,
   mimeType: string,
-  memory: Readonly<AgentMemory>
+  memory: Readonly<AgentMemory>,
+  clientConfig: AgentClientConfig,
 ): Promise<AgentFunctionResult> {
   const { name, arguments: args } = functionCall;
 
   try {
     switch (name) {
       case 're_ocr_region':
-        return await executeReOcrRegion(args, fileData, mimeType, memory);
+        return await executeReOcrRegion(args, fileData, mimeType, memory, clientConfig);
 
-      case 'extract_field':
-        return await executeExtractField(args, fileData, mimeType, memory);
-
-      case 'validate_extraction':
-        return await executeValidateExtraction(args, fileData, mimeType, memory);
+      case 'extract_fields_batch':
+        return await executeExtractFieldsBatch(args, fileData, mimeType, memory);
 
       case 'analyze_document_structure':
         return await executeAnalyzeDocumentStructure(args, fileData, mimeType, memory);
-
-      case 'finalize_extraction':
-        return await executeFinalizeExtraction(args, fileData, mimeType, memory);
 
       default:
         throw new Error(`Unknown function: ${name}`);
@@ -257,40 +266,44 @@ export async function executeFunctionCall(
  * Create initial system prompt for the agent
  */
 export function createAgentSystemPrompt(documentType?: string): string {
+  const schemaGuidance = buildAgentSchemaGuidance(documentType);
+
   return `You are a structured data extraction agent specialized in identifying and extracting specific fields from documents.
 
 WORKFLOW:
 1. **Analyze**: Call analyze_document_structure to understand document type and layout
-2. **Extract**: Call extract_field for EACH piece of structured information you identify
-3. **Validate**: Call validate_extraction to verify your extractions
-4. **Refine**: If confidence < threshold, call re_ocr_region on unclear areas
-5. **Finalize**: Call finalize_extraction when all key fields are extracted
+2. **Extract**: Call extract_fields_batch with every field you can confidently identify in this pass
+3. **Refine**: If key fields are missing or low-confidence, call re_ocr_region on the specific area
+4. **Repeat**: After re_ocr_region, call extract_fields_batch again with improved values
 
 IMPORTANT: Call ONE tool at a time. Wait for the result before deciding your next action.
 Do NOT call multiple tools simultaneously - chain them sequentially based on results.
+After analyze_document_structure, use the returned required_fields and optional_fields as your canonical field names.
+The runtime, not you, decides when extraction is complete. Do not try to simulate a finalization step.
 
 FIELD EXTRACTION RULES:
 - Extract SPECIFIC FIELDS, not full document text
 - Each field represents ONE piece of structured information (name, date, amount, etc.)
 - Always provide the ACTUAL TEXT VALUE you see, not a description
 - Include confidence score (0.0-1.0) based on text clarity
+- Prefer one high-quality extract_fields_batch call over many tiny batches
+- Reuse canonical field names exactly
 
 CORRECT EXAMPLES:
-✓ extract_field(field_name="invoice_number", field_value="INV-2024-001", confidence=0.95)
-✓ extract_field(field_name="total_amount", field_value="$1,234.56", confidence=0.90)
-✓ extract_field(field_name="customer_name", field_value="Acme Corporation", confidence=0.92)
-✓ extract_field(field_name="due_date", field_value="2024-03-15", confidence=0.88)
+✓ extract_fields_batch(fields=[{field_name:"invoice_number", field_value:"INV-2024-001", confidence:0.95},{field_name:"customer_name", field_value:"Acme Corporation", confidence:0.92}])
+✓ extract_fields_batch(fields=[{field_name:"email", field_value:"jordan@example.com", confidence:0.98, validation_rule:"email"}])
 
 INCORRECT EXAMPLES:
-✗ extract_field(field_name="invoice", field_value="I see an invoice number in the top right", confidence=0.8)
-✗ extract_field(field_name="document", field_value="This is a financial document", confidence=0.9)
-✗ extract_field(field_name="text", field_value="There is text on the page", confidence=0.7)
+✗ extract_fields_batch(fields=[{field_name:"invoice", field_value:"I see an invoice number in the top right", confidence:0.8}])
+✗ extract_fields_batch(fields=[{field_name:"document", field_value:"This is a financial document", confidence:0.9}])
+✗ extract_fields_batch(fields=[{field_name:"text", field_value:"There is text on the page", confidence:0.7}])
 
 DOCUMENT-SPECIFIC FIELDS:
-- **Invoices**: invoice_number, invoice_date, due_date, vendor_name, customer_name, line_items, subtotal, tax, total_amount
-- **Resumes**: candidate_name, email, phone, address, work_experience, education, skills, certifications
+- **Invoices**: vendor_name, invoice_number, invoice_date, customer_name, total_amount, due_date, currency, subtotal_amount, tax_amount, line_items
+- **Resumes**: full_name, email, phone_number, location, job_title, skills, experience, education
 - **Forms**: All labeled fields and their corresponding values
-- **Receipts**: merchant_name, date, items, amounts, total, payment_method
+- **Receipts**: merchant_name, transaction_date, total_amount, receipt_number, payment_method, subtotal_amount, tax_amount, items
+- **Business cards**: full_name, job_title, company_name, email, phone_number, website, address
 - **Contracts**: parties, effective_date, terms, signatures, clauses
 
 CONFIDENCE SCORING:
@@ -300,6 +313,7 @@ CONFIDENCE SCORING:
 - Below 0.70: Consider using re_ocr_region to improve
 
 ${documentType ? `Document Type: ${documentType}` : 'Document Type: Unknown - analyze first'}
+${schemaGuidance}
 
 Remember: You are extracting structured data fields, not performing full OCR. Focus on identifying and extracting key information fields.`;
 }
@@ -333,22 +347,32 @@ Analyze these results and determine if improvement is needed. Focus on fields wi
  */
 export function createFollowUpPrompt(
   iteration: number,
-  extractedFields: Record<string, { value: string; confidence: number }>
+  memory: AgentMemory
 ): string {
+  const extractedFields = memory.extractedFields;
+  const readiness = getAgentReadiness(memory);
   const fieldCount = Object.keys(extractedFields).length;
   const fieldSummary = Object.entries(extractedFields)
     .map(([name, field]) => `  - ${name}: "${field.value}" (confidence: ${field.confidence.toFixed(2)})`)
     .join('\n');
+  const missingRequired = readiness.missingRequiredFields.length > 0
+    ? `\nMissing required fields: ${readiness.missingRequiredFields.join(', ')}`
+    : '\nMissing required fields: none';
+  const canonicalFields = readiness.hasSchema
+    ? `\nCanonical required fields: ${readiness.requiredFields.join(', ')}`
+    : '';
 
   return `This is iteration ${iteration}. Review your previous extractions and improve:
 
 Extracted ${fieldCount} fields so far:
 ${fieldSummary || '  (none)'}
+${missingRequired}
+${canonicalFields}
 
 Focus on:
 - Fields with confidence below 0.85 that need re-extraction
-- Missing fields that should be present for this document type
+- Missing required fields that should be present for this document type
 - Validation of extracted values against each other
 
-Continue extraction or call finalize_extraction if all fields are complete.`;
+If you can improve the result, call re_ocr_region and then extract_fields_batch again. Otherwise stop calling tools.`;
 }

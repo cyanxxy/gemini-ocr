@@ -1,0 +1,17 @@
+{
+  "id": "agentic-invoice",
+  "mode": "agentic",
+  "inputPath": "evals/corpus/invoice.pdf",
+  "agentConfig": {
+    "maxIterations": 4,
+    "confidenceThreshold": 0.65
+  },
+  "expectedAssertions": [
+    { "type": "json_field_equals", "path": "documentType", "expected": "invoice" },
+    { "type": "json_field_exists", "path": "normalizedFields.invoice_number.value" },
+    { "type": "json_field_exists", "path": "normalizedFields.total_amount.value" },
+    { "type": "contains", "target": "markdown", "value": "Northwind Supply Co." },
+    { "type": "pass_rate_weight", "value": 1 }
+  ],
+  "tags": ["invoice", "agentic", "table"]
+}

@@ -1,8 +1,14 @@
 import { AgentFunctionResult, AgentMemory } from './agentTypes';
-import { extractTextFromFile } from './gemini/extraction';
-import { FunctionDeclaration } from '@google/genai';
-import { logger } from './logger';
-import { useSettingsStore } from '../store/useSettingsStore';
+import { FunctionDeclaration, GoogleGenAI } from '@google/genai';
+import type { AgentClientConfig } from './agentTypes';
+import {
+  getAgentDocumentSchema,
+  getAgentReadiness,
+  normalizeAgentDocumentType,
+  normalizeAgentFieldName,
+} from './agentSchema';
+import { applyThinkingConfig } from './gemini/client';
+import { getTopKForModel, parseJsonPayload } from './gemini/structured';
 
 // Runtime validation helpers for Gemini function call args
 
@@ -30,6 +36,94 @@ function assertObject(args: Record<string, unknown>, key: string): Record<string
   return v as Record<string, unknown>;
 }
 
+function assertArray(args: Record<string, unknown>, key: string): Record<string, unknown>[] {
+  const v = args[key];
+  if (!Array.isArray(v) || v.length === 0) {
+    throw new TypeError(`Expected non-empty array for "${key}", got ${typeof v}`);
+  }
+
+  return v.map((entry, index) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      throw new TypeError(`Expected object at "${key}[${index}]", got ${typeof entry}`);
+    }
+    return entry as Record<string, unknown>;
+  });
+}
+
+interface RawRegionFieldPayload {
+  fields?: unknown;
+}
+
+function parseRegionFieldPayload(rawText: string): Record<string, unknown>[] {
+  const parsed = parseJsonPayload<RawRegionFieldPayload>(rawText, 'Re-OCR');
+
+  if (!Array.isArray(parsed.fields)) {
+    throw new Error('Re-OCR response must include a "fields" array');
+  }
+
+  return parsed.fields.map((entry, index) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      throw new Error(`Re-OCR response field at index ${index} is not an object`);
+    }
+    return entry as Record<string, unknown>;
+  });
+}
+
+function normalizeStructuredFields(
+  entries: Record<string, unknown>[],
+  memory: Readonly<AgentMemory>,
+) {
+  const acceptedFields: Record<string, AgentMemory['extractedFields'][string]> = {};
+  const extractedSummaries: Array<Record<string, unknown>> = [];
+
+  for (const entry of entries) {
+    const rawFieldName = assertString(entry, 'field_name');
+    const field_name = normalizeAgentFieldName(memory.documentAnalysis.documentType, rawFieldName);
+    const field_value = assertString(entry, 'field_value');
+    const confidence = assertNumber(entry, 'confidence');
+    const validation_rule = typeof entry.validation_rule === 'string'
+      ? entry.validation_rule
+      : inferValidationRule(field_name);
+    const location = typeof entry.location === 'object' && entry.location !== null
+      ? entry.location as Record<string, unknown>
+      : undefined;
+
+    const validationResult = validation_rule
+      ? validateFieldValue(field_value, validation_rule)
+      : validateFieldFormat(field_value, field_name);
+
+    const preparedField = {
+      value: field_value,
+      confidence,
+      validation_rule,
+      location: location ? JSON.stringify(location) : undefined,
+      isValid: validationResult.isValid,
+      validationMessage: validationResult.message,
+      extractedAt: Date.now(),
+    };
+
+    const currentField = acceptedFields[field_name] ?? memory.extractedFields[field_name];
+    if (!currentField || preparedField.confidence >= currentField.confidence) {
+      acceptedFields[field_name] = preparedField;
+    }
+
+    extractedSummaries.push({
+      field_name,
+      original_field_name: rawFieldName,
+      field_value,
+      confidence,
+      validation_rule,
+      isValid: validationResult.isValid,
+      validationMessage: validationResult.message,
+    });
+  }
+
+  return {
+    acceptedFields,
+    extractedSummaries,
+  };
+}
+
 export const AGENT_FUNCTIONS: FunctionDeclaration[] = [
   {
     name: 're_ocr_region',
@@ -40,37 +134,39 @@ export const AGENT_FUNCTIONS: FunctionDeclaration[] = [
         page: { type: 'number', description: 'The page number to re-process.' },
         region: { type: 'string', description: 'A description of the region to focus on (e.g., "top-left corner", "the table in the middle").' },
         focus: { type: 'string', description: 'Specific text or type of content to focus on within the region.' },
+        target_fields: {
+          type: 'array',
+          description: 'Optional canonical field names that should be improved from this region.',
+          items: { type: 'string' },
+        },
         confidence_threshold: { type: 'number', description: 'The confidence threshold to aim for (0.0 to 1.0).' },
       },
       required: ['page', 'region', 'focus'],
     },
   },
   {
-    name: 'extract_field',
-    description: 'Extract and validate a specific field from the document.',
+    name: 'extract_fields_batch',
+    description: 'Extract all currently visible structured fields in one batch using canonical field names.',
     parametersJsonSchema: {
       type: 'object',
       properties: {
-        field_name: { type: 'string', description: 'The name of the field to extract (e.g., "invoice_number", "customer_name").' },
-        field_value: { type: 'string', description: 'The extracted value of the field.' },
-        confidence: { type: 'number', description: 'The confidence score of the extraction (0.0 to 1.0).' },
-        validation_rule: { type: 'string', description: 'An optional validation rule to apply (e.g., "email", "phone", "date").' },
-        location: { type: 'object', description: 'The bounding box of the extracted field.' },
+        fields: {
+          type: 'array',
+          description: 'The structured fields extracted from the document in this pass.',
+          items: {
+            type: 'object',
+            properties: {
+              field_name: { type: 'string', description: 'Canonical field name (e.g., "invoice_number", "customer_name").' },
+              field_value: { type: 'string', description: 'The extracted value of the field.' },
+              confidence: { type: 'number', description: 'The confidence score of the extraction (0.0 to 1.0).' },
+              validation_rule: { type: 'string', description: 'Optional validation rule such as "email", "phone", "date", or "currency".' },
+              location: { type: 'object', description: 'Optional field location or bounding box.' },
+            },
+            required: ['field_name', 'field_value', 'confidence'],
+          },
+        },
       },
-      required: ['field_name', 'field_value', 'confidence'],
-    },
-  },
-  {
-    name: 'validate_extraction',
-    description: 'Validate extracted data against document context or business rules.',
-    parametersJsonSchema: {
-      type: 'object',
-      properties: {
-        fields: { type: 'object', description: 'The fields to validate as a key-value pair.' },
-        validation_type: { type: 'string', description: 'The type of validation to perform (e.g., "format", "consistency", "completeness").' },
-        context: { type: 'string', description: 'Optional context for business rule validation.' },
-      },
-      required: ['fields', 'validation_type'],
+      required: ['fields'],
     },
   },
   {
@@ -87,21 +183,6 @@ export const AGENT_FUNCTIONS: FunctionDeclaration[] = [
       required: ['document_type', 'layout_analysis', 'extraction_strategy', 'confidence'],
     },
   },
-  {
-    name: 'finalize_extraction',
-    description: 'Finalize the extraction process and provide a summary.',
-    parametersJsonSchema: {
-      type: 'object',
-      properties: {
-        extracted_fields: { type: 'object', description: 'All the fields that have been extracted.' },
-        overall_confidence: { type: 'number', description: 'The overall confidence in the extracted data.' },
-        extraction_summary: { type: 'string', description: 'A summary of the extraction process.' },
-        recommendations: { type: 'string', description: 'Optional recommendations for improvement.' },
-        quality_score: { type: 'number', description: 'A final quality score for the extraction.' },
-      },
-      required: ['extracted_fields', 'overall_confidence', 'extraction_summary', 'quality_score'],
-    },
-  },
 ];
 
 /**
@@ -115,63 +196,114 @@ export async function executeReOcrRegion(
   args: Record<string, unknown>,
   fileData: string,
   mimeType: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _memory: Readonly<AgentMemory>
+  memory: Readonly<AgentMemory>,
+  clientConfig: AgentClientConfig,
 ): Promise<AgentFunctionResult> {
   try {
     const page = assertNumber(args, 'page');
     const region = assertString(args, 'region');
     const focus = assertString(args, 'focus');
+    const explicitTargetFields = Array.isArray(args.target_fields)
+      ? args.target_fields.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : [];
     const confidence_threshold = typeof args.confidence_threshold === 'number' ? args.confidence_threshold : 0.7;
+    const readiness = getAgentReadiness(memory);
+    const targetFields = explicitTargetFields.length > 0
+      ? explicitTargetFields
+      : readiness.missingRequiredFields;
+    const schema = getAgentDocumentSchema(memory.documentAnalysis.documentType);
+    const base64Data = fileData.split(',')[1] || fileData;
+    const genAI = new GoogleGenAI({ apiKey: clientConfig.apiKey });
 
-    // Create focused extraction instruction
-    const instruction = {
-      title: `Re-OCR Region - ${region}`,
-      prompt: `Focus specifically on ${region} on page ${page}. 
-        Pay special attention to ${focus}. 
-        This is a re-processing attempt to improve accuracy.
-        
-        Requirements:
-        - Extract text with high precision
-        - Focus only on the specified region: ${region}
-        - Prioritize ${focus}
-        - Provide confidence scores for extracted text
-        - If handwritten text, analyze each character carefully
-        - Mark uncertain text with [?]
-        
-        Return the extracted text with confidence assessment.`
+    let generationConfig: Record<string, unknown> = {
+      temperature: 1,
+      maxOutputTokens: 4096,
+      topP: 0.95,
+      topK: getTopKForModel(clientConfig.model),
+      responseMimeType: 'application/json',
     };
 
-    // Call the existing OCR function with focused instructions
-    const { apiKey, model, thinkingConfig } = useSettingsStore.getState();
+    if (clientConfig.abortSignal) {
+      generationConfig.abortSignal = clientConfig.abortSignal;
+    }
 
-    const result = await extractTextFromFile(
-      fileData,
-      mimeType,
-      { apiKey, model, thinkingConfig },
-      [instruction],
-      {
-        handwritingStyle: 'general',
-        outputFormat: 'markdown',
-        detectImages: false
-      }
-    );
+    generationConfig = applyThinkingConfig(generationConfig, clientConfig.model, clientConfig.thinkingConfig);
+
+    const prompt = [
+      'Return valid JSON only.',
+      'Do not wrap the JSON in markdown fences.',
+      'You are re-reading a specific region of a document to recover structured field values.',
+      'Respond with {"fields":[{"field_name":"string","field_value":"string","confidence":0.0,"validation_rule":"string","location":{"description":"string"}}]}.',
+      `Focus specifically on region "${region}" on page ${page}.`,
+      `Prioritize this focus instruction: ${focus}.`,
+      `Document type: ${normalizeAgentDocumentType(memory.documentAnalysis.documentType)}.`,
+      schema
+        ? `Canonical fields for this document type: ${[...schema.requiredFields, ...schema.optionalFields].join(', ')}.`
+        : 'Use concise canonical field names if the document type is still unknown.',
+      targetFields.length > 0
+        ? `Target fields to recover from this region: ${targetFields.join(', ')}.`
+        : 'Recover any high-value structured fields visible in this region.',
+      'Only return fields you can see in this region.',
+      `Every field confidence must be >= ${confidence_threshold.toFixed(2)} to be worth returning.`,
+      'If no useful structured fields are visible, return {"fields":[]}.',
+    ].join(' ');
+
+    const response = await genAI.models.generateContent({
+      model: clientConfig.model,
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          {
+            inlineData: {
+              mimeType,
+              data: base64Data,
+            },
+          },
+        ],
+      }],
+      config: generationConfig,
+    });
+
+    const rawFields = parseRegionFieldPayload(response.text || '');
+    const filteredFields = rawFields.filter((entry) => {
+      const entryConfidence = typeof entry.confidence === 'number' ? entry.confidence : 0;
+      return entryConfidence >= confidence_threshold;
+    });
+    const { acceptedFields, extractedSummaries } = normalizeStructuredFields(filteredFields, memory);
+    const simulatedFields = { ...memory.extractedFields, ...acceptedFields };
+    applyCodeDrivenReviews(simulatedFields);
+    const updatedReadiness = getAgentReadiness({
+      documentAnalysis: memory.documentAnalysis,
+      extractedFields: simulatedFields,
+    });
 
     return {
       success: true,
       data: {
-        extractedText: result,
         region,
         page,
         focus,
-        confidence: confidence_threshold,
+        targetFields,
+        fieldCandidates: extractedSummaries,
+        fieldCount: Object.keys(acceptedFields).length,
+        confidenceThreshold: confidence_threshold,
       },
       memoryUpdate: {
+        extractedFields: acceptedFields,
+        confidence: updatedReadiness.averageConfidence,
         processingHistoryItem: {
           type: 'function_call',
-          content: `Re-OCR performed on page ${page}, region: ${region}`,
+          content: `Re-OCR recovered ${Object.keys(acceptedFields).length} fields from page ${page}, region: ${region}`,
           functionCall: { name: 're_ocr_region', arguments: args },
-          functionResult: { success: true, data: result },
+          functionResult: {
+            success: true,
+            data: {
+              fieldCount: Object.keys(acceptedFields).length,
+              recoveredFields: Object.keys(acceptedFields),
+              missingRequiredFields: updatedReadiness.missingRequiredFields,
+            }
+          },
           timestamp: Date.now(),
         }
       }
@@ -185,67 +317,47 @@ export async function executeReOcrRegion(
 }
 
 /**
- * Extract and validate a specific field
+ * Extract and validate a batch of fields.
  */
-export async function executeExtractField(
+export async function executeExtractFieldsBatch(
   args: Record<string, unknown>,
   _fileData: string,
   _mimeType: string,
   memory: Readonly<AgentMemory>
 ): Promise<AgentFunctionResult> {
   try {
-    const field_name = assertString(args, 'field_name');
-    const field_value = assertString(args, 'field_value');
-    const confidence = assertNumber(args, 'confidence');
-    const validation_rule = typeof args.validation_rule === 'string' ? args.validation_rule : undefined;
-    const location = typeof args.location === 'object' && args.location !== null ? args.location as Record<string, unknown> : undefined;
-
-    // Validate the field value based on the validation rule
-    let isValid = true;
-    let validationMessage = '';
-
-    if (validation_rule) {
-      const validationResult = validateFieldValue(field_value, validation_rule);
-      isValid = validationResult.isValid;
-      validationMessage = validationResult.message;
-    }
-
-    // Prepare the new field data
-    // Note: location is stored as a JSON string for compatibility with field storage
-    const newFieldData = {
-      value: field_value,
-      confidence,
-      validation_rule,
-      location: location ? JSON.stringify(location) : undefined,
-      isValid,
-      validationMessage,
-      extractedAt: Date.now(),
-    };
-
-    // Calculate new overall confidence without mutating
-    // We simulate adding the new field to the existing ones
-    const simulatedFields = { ...memory.extractedFields, [field_name]: newFieldData };
-    const fieldConfidences = Object.values(simulatedFields).map(field => field.confidence);
-    const newOverallConfidence = fieldConfidences.reduce((sum, conf) => sum + conf, 0) / fieldConfidences.length;
+    const batch = assertArray(args, 'fields');
+    const { acceptedFields, extractedSummaries } = normalizeStructuredFields(batch, memory);
+    const simulatedFields = { ...memory.extractedFields, ...acceptedFields };
+    applyCodeDrivenReviews(simulatedFields);
+    const readiness = getAgentReadiness({
+      documentAnalysis: memory.documentAnalysis,
+      extractedFields: simulatedFields,
+    });
 
     return {
       success: true,
       data: {
-        field_name,
-        field_value,
-        confidence,
-        isValid,
-        validationMessage,
-        location,
+        fieldCount: Object.keys(acceptedFields).length,
+        fields: extractedSummaries,
+        requiredCoverage: readiness.requiredCoverage,
+        missingRequiredFields: readiness.missingRequiredFields,
       },
       memoryUpdate: {
-        extractedFields: { [field_name]: newFieldData },
-        confidence: newOverallConfidence,
+        extractedFields: acceptedFields,
+        confidence: readiness.averageConfidence,
         processingHistoryItem: {
           type: 'function_call',
-          content: `Field extracted: ${field_name} = ${field_value}`,
-          functionCall: { name: 'extract_field', arguments: args },
-          functionResult: { success: true, data: { field_name, field_value, confidence, isValid } },
+          content: `Batch extracted ${Object.keys(acceptedFields).length} fields`,
+          functionCall: { name: 'extract_fields_batch', arguments: args },
+          functionResult: {
+            success: true,
+            data: {
+              fieldCount: Object.keys(acceptedFields).length,
+              requiredCoverage: readiness.requiredCoverage,
+              missingRequiredFields: readiness.missingRequiredFields,
+            }
+          },
           timestamp: Date.now(),
         }
       }
@@ -253,70 +365,7 @@ export async function executeExtractField(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Field extraction failed',
-    };
-  }
-}
-
-/**
- * Validate extracted data against document context
- */
-export async function executeValidateExtraction(
-  args: Record<string, unknown>,
-  _fileData: string,
-  _mimeType: string,
-  memory: Readonly<AgentMemory>
-): Promise<AgentFunctionResult> {
-  try {
-    const fields = assertObject(args, 'fields');
-    const validation_type = typeof args.validation_type === 'string' ? args.validation_type : 'format';
-    const context = typeof args.context === 'string' ? args.context : undefined;
-
-    const validationResults: Record<string, { isValid: boolean; message: string }> = {};
-
-    for (const [fieldName, fieldValue] of Object.entries(fields)) {
-      let validationResult = { isValid: true, message: '' };
-
-      switch (validation_type) {
-        case 'format':
-          validationResult = validateFieldFormat(fieldValue as string, fieldName);
-          break;
-        case 'consistency':
-          validationResult = validateFieldConsistency(fieldValue as string, fieldName, memory);
-          break;
-        case 'completeness':
-          validationResult = validateFieldCompleteness(fieldValue as string, fieldName);
-          break;
-        case 'cross_reference':
-          validationResult = validateFieldCrossReference(fieldValue as string, fieldName, memory);
-          break;
-        case 'business_rules':
-          validationResult = validateBusinessRules(fieldValue as string, fieldName, context);
-          break;
-        default:
-          validationResult = { isValid: true, message: 'Unknown validation type' };
-      }
-
-      validationResults[fieldName] = validationResult;
-    }
-
-    return {
-      success: true,
-      data: validationResults,
-      memoryUpdate: {
-        processingHistoryItem: {
-          type: 'function_call',
-          content: `Validation performed: ${validation_type}`,
-          functionCall: { name: 'validate_extraction', arguments: args },
-          functionResult: { success: true, data: validationResults },
-          timestamp: Date.now(),
-        }
-      }
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Validation failed',
+      error: error instanceof Error ? error.message : 'Batch field extraction failed',
     };
   }
 }
@@ -331,10 +380,11 @@ export async function executeAnalyzeDocumentStructure(
   memory: Readonly<AgentMemory>
 ): Promise<AgentFunctionResult> {
   try {
-    const document_type = assertString(args, 'document_type');
+    const document_type = normalizeAgentDocumentType(assertString(args, 'document_type'));
     const layout_analysis = assertObject(args, 'layout_analysis');
     const extraction_strategy = assertString(args, 'extraction_strategy');
     const confidence = assertNumber(args, 'confidence');
+    const schema = getAgentDocumentSchema(document_type);
 
     // New document analysis state
     const newDocumentAnalysis = {
@@ -351,6 +401,8 @@ export async function executeAnalyzeDocumentStructure(
         layout_analysis,
         extraction_strategy,
         confidence,
+        required_fields: schema?.requiredFields ?? [],
+        optional_fields: schema?.optionalFields ?? [],
         complexity: newDocumentAnalysis.complexity,
         specialFeatures: newDocumentAnalysis.specialFeatures,
       },
@@ -369,55 +421,6 @@ export async function executeAnalyzeDocumentStructure(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Document analysis failed',
-    };
-  }
-}
-
-/**
- * Finalize extraction process
- */
-export async function executeFinalizeExtraction(
-  args: Record<string, unknown>,
-  _fileData: string,
-  _mimeType: string,
-  memory: Readonly<AgentMemory>
-): Promise<AgentFunctionResult> {
-  try {
-    const overall_confidence = assertNumber(args, 'overall_confidence');
-    const extraction_summary = assertString(args, 'extraction_summary');
-    const recommendations = typeof args.recommendations === 'string' ? args.recommendations : undefined;
-    const quality_score = assertNumber(args, 'quality_score');
-
-    // Use the maximum of current tracked confidence and agent-provided confidence
-    // This preserves the carefully calculated confidence from extract_field calls
-    // while allowing the agent to increase confidence if warranted
-    const finalConfidence = Math.max(memory.confidence, overall_confidence);
-
-    return {
-      success: true,
-      data: {
-        overall_confidence: finalConfidence,
-        extraction_summary,
-        recommendations,
-        quality_score,
-        fieldCount: Object.keys(memory.extractedFields).length,
-      },
-      memoryUpdate: {
-        confidence: finalConfidence,
-        lastUpdated: Date.now(),
-        processingHistoryItem: {
-          type: 'result',
-          content: `Extraction finalized: ${extraction_summary}`,
-          functionCall: { name: 'finalize_extraction', arguments: args },
-          functionResult: { success: true, data: { overall_confidence: finalConfidence, quality_score } },
-          timestamp: Date.now(),
-        }
-      }
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Finalization failed',
     };
   }
 }
@@ -444,7 +447,7 @@ function validateFieldValue(value: string, rule: string): { isValid: boolean; me
       };
     }
     case 'date': {
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$|^\d{2}\/\d{2}\/\d{4}$|^\d{2}-\d{2}-\d{4}$/;
+      const dateRegex = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$|^\d{2}\/\d{2}\/\d{4}([ T]\d{2}:\d{2}(:\d{2})?)?$|^\d{2}-\d{2}-\d{4}([ T]\d{2}:\d{2}(:\d{2})?)?$/;
       return {
         isValid: dateRegex.test(value),
         message: dateRegex.test(value) ? 'Valid date format' : 'Invalid date format',
@@ -466,6 +469,52 @@ function validateFieldValue(value: string, rule: string): { isValid: boolean; me
     }
     default:
       return { isValid: true, message: 'No validation rule applied' };
+  }
+}
+
+function inferValidationRule(fieldName: string): string | undefined {
+  const lowerFieldName = fieldName.toLowerCase();
+
+  if (lowerFieldName.includes('email')) return 'email';
+  if (lowerFieldName.includes('phone')) return 'phone';
+  if (lowerFieldName.includes('date')) return 'date';
+  if (
+    lowerFieldName.includes('amount')
+    || lowerFieldName === 'total'
+    || lowerFieldName === 'subtotal'
+    || lowerFieldName.includes('tax')
+  ) {
+    return 'currency';
+  }
+
+  return undefined;
+}
+
+function applyCodeDrivenReviews(fields: Record<string, AgentMemory['extractedFields'][string]>) {
+  const reviewMemory = {
+    extractedFields: fields,
+  } as Readonly<AgentMemory>;
+
+  for (const [fieldName, field] of Object.entries(fields)) {
+    const formatResult = validateFieldFormat(field.value, fieldName);
+    const consistencyResult = validateFieldConsistency(field.value, fieldName, reviewMemory);
+    const crossReferenceResult = validateFieldCrossReference(field.value, fieldName, reviewMemory);
+
+    const failedReview = !formatResult.isValid
+      ? formatResult
+      : !consistencyResult.isValid
+        ? consistencyResult
+      : !crossReferenceResult.isValid
+        ? crossReferenceResult
+        : null;
+
+    fields[fieldName] = {
+      ...field,
+      isValid: failedReview ? false : field.isValid ?? true,
+      validationMessage: failedReview
+        ? failedReview.message
+        : field.validationMessage || formatResult.message,
+    };
   }
 }
 
@@ -513,18 +562,6 @@ function validateFieldConsistency(value: string, fieldName: string, memory: Read
   }
   
   return { isValid: true, message: 'Consistency validation passed' };
-}
-
-/**
- * Validate field completeness
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function validateFieldCompleteness(value: string, _fieldName: string): { isValid: boolean; message: string } {
-  const isEmpty = !value || value.trim() === '' || value.toLowerCase() === 'null' || value.toLowerCase() === 'undefined';
-  return {
-    isValid: !isEmpty,
-    message: isEmpty ? 'Field is empty or missing' : 'Field is complete',
-  };
 }
 
 /**
@@ -581,97 +618,6 @@ function validateFieldCrossReference(value: string, fieldName: string, memory: R
   }
 
   return { isValid: true, message: 'Cross-reference validation passed' };
-}
-
-/**
- * Validate business rules
- */
-function validateBusinessRules(value: string, _fieldName: string, context?: string): { isValid: boolean; message: string } {
-  if (!context) {
-    return { isValid: true, message: 'No business rules provided' };
-  }
-
-  const rules = context.split(';').map(r => r.trim());
-  
-  for (const rule of rules) {
-    const [ruleName, ruleValue] = rule.split(':').map(s => s.trim());
-    
-    switch (ruleName.toLowerCase()) {
-      case 'min': {
-        const minVal = parseFloat(ruleValue);
-        const numVal = parseFloat(value);
-        if (isNaN(numVal) || numVal < minVal) {
-          return { isValid: false, message: `Value must be at least ${minVal}` };
-        }
-        break;
-      }
-      case 'max': {
-        const maxVal = parseFloat(ruleValue);
-        const numVal = parseFloat(value);
-        if (isNaN(numVal) || numVal > maxVal) {
-          return { isValid: false, message: `Value must be at most ${maxVal}` };
-        }
-        break;
-      }
-      case 'starts_with': {
-        if (!value.startsWith(ruleValue)) {
-          return { isValid: false, message: `Value must start with "${ruleValue}"` };
-        }
-        break;
-      }
-      case 'ends_with': {
-        if (!value.endsWith(ruleValue)) {
-          return { isValid: false, message: `Value must end with "${ruleValue}"` };
-        }
-        break;
-      }
-      case 'length': {
-        const len = parseInt(ruleValue, 10);
-        if (value.length !== len) {
-          return { isValid: false, message: `Value must be exactly ${len} characters long` };
-        }
-        break;
-      }
-      case 'regex': {
-        try {
-          const regex = new RegExp(ruleValue);
-          if (!regex.test(value)) {
-            return { isValid: false, message: `Value does not match pattern ${ruleValue}` };
-          }
-        } catch (e) {
-          logger.warn('Invalid regex in business rule definition:', ruleValue, e);
-        }
-        break;
-      }
-      case 'is_numeric': {
-        if (isNaN(parseFloat(value))) {
-           return { isValid: false, message: 'Value must be numeric' };
-        }
-        break;
-      }
-      case 'date_past': {
-        const date = new Date(value);
-        if (isNaN(date.getTime()) || date > new Date()) {
-           return { isValid: false, message: 'Date must be in the past' };
-        }
-        break;
-      }
-      case 'no_future_date': {
-        const date = new Date(value);
-        // Allow today, but not future
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(0,0,0,0);
-        
-        if (isNaN(date.getTime()) || date >= tomorrow) {
-           return { isValid: false, message: 'Date cannot be in the future' };
-        }
-        break;
-      }
-    }
-  }
-
-  return { isValid: true, message: 'Business rules validation passed' };
 }
 
 /**

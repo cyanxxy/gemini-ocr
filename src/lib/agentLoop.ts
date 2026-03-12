@@ -1,6 +1,6 @@
 import { type Content } from '@google/genai';
-import { logger } from './logger';
 import {
+  AgentClientConfig,
   AgentLoopConfig,
   AgentMemory,
   AgentStep,
@@ -10,11 +10,11 @@ import {
 import { AGENT_FUNCTIONS } from './agentTools';
 import {
   executeAgentTurn,
-  executeFunctionCall,
   createAgentSystemPrompt,
   createUserPrompt,
   createFollowUpPrompt
 } from './agentGemini';
+import { getAgentReadiness } from './agentSchema';
 
 /**
  * Default agent configuration (Gemini 3)
@@ -22,9 +22,8 @@ import {
 const DEFAULT_AGENT_CONFIG: AgentLoopConfig = {
   maxIterations: 5,
   confidenceThreshold: 0.8,
-  temperature: 1.0, // Gemini 3 defaults to temperature 1.0
+  temperature: 1,
   maxTokens: 4096,
-  model: 'gemini-3-flash-preview',
   enableThinking: true, // Always enabled for Gemini 3
 };
 
@@ -56,7 +55,24 @@ export function applyMemoryUpdate(memory: AgentMemory, update?: AgentMemoryUpdat
   if (!update) return;
 
   if (update.extractedFields) {
-    Object.assign(memory.extractedFields, update.extractedFields);
+    for (const [fieldName, incomingField] of Object.entries(update.extractedFields)) {
+      const existingField = memory.extractedFields[fieldName];
+      if (!existingField) {
+        memory.extractedFields[fieldName] = incomingField;
+        continue;
+      }
+
+      const incomingConfidence = incomingField.confidence ?? 0;
+      const existingConfidence = existingField.confidence ?? 0;
+      const incomingExtractedAt = incomingField.extractedAt ?? 0;
+      const existingExtractedAt = existingField.extractedAt ?? 0;
+      const shouldReplace = incomingConfidence > existingConfidence
+        || (incomingConfidence === existingConfidence && incomingExtractedAt >= existingExtractedAt);
+
+      memory.extractedFields[fieldName] = shouldReplace
+        ? { ...existingField, ...incomingField }
+        : { ...incomingField, ...existingField };
+    }
   }
 
   if (update.documentAnalysis) {
@@ -84,6 +100,7 @@ export function applyMemoryUpdate(memory: AgentMemory, update?: AgentMemoryUpdat
 export async function* agentLoop(
   file: File,
   fileData: string,
+  clientConfig: AgentClientConfig,
   config: Partial<AgentLoopConfig> = {},
   onProgress?: ProgressCallback
 ): AsyncGenerator<AgentStep, AgentMemory, unknown> {
@@ -114,7 +131,6 @@ export async function* agentLoop(
     const normalizedMimeType = supportedImageTypes.includes(file.type) ? file.type :
                                (file.type.startsWith('image/') ? 'image/jpeg' : file.type);
 
-    const systemPrompt = createAgentSystemPrompt(memory.documentAnalysis.documentType);
     const initialUserPrompt = createUserPrompt(file.name, 1);
 
     // Build initial contents with the image (only sent once)
@@ -132,6 +148,10 @@ export async function* agentLoop(
     }];
 
     while (iteration < agentConfig.maxIterations && !isComplete) {
+      if (clientConfig.abortSignal?.aborted) {
+        return memory;
+      }
+
       iteration++;
       memory.currentIteration = iteration;
 
@@ -151,20 +171,16 @@ export async function* agentLoop(
         if (iteration > 1) {
           contents.push({
             role: 'user',
-            parts: [{ text: createFollowUpPrompt(iteration, memory.extractedFields) }]
+            parts: [{ text: createFollowUpPrompt(iteration, memory) }]
           });
         }
+
+        const systemPrompt = createAgentSystemPrompt(memory.documentAnalysis.documentType);
 
         yield {
           type: 'thinking',
           content: `Analyzing document with Gemini AI (iteration ${iteration})...`,
           timestamp: Date.now(),
-        };
-
-        // Collect steps from the inner turn loop via callback
-        const pendingSteps: AgentStep[] = [];
-        const onStep = (step: AgentStep) => {
-          pendingSteps.push(step);
         };
 
         // Execute multi-turn function calling
@@ -175,8 +191,9 @@ export async function* agentLoop(
           fileData,
           file.type,
           memory,
+          clientConfig,
           agentConfig,
-          onStep
+          () => undefined
         );
 
         // Yield all steps produced during the turn
@@ -199,49 +216,25 @@ export async function* agentLoop(
         }
 
         // Check if we should stop based on confidence
-        if (memory.confidence >= agentConfig.confidenceThreshold) {
+        const readiness = getAgentReadiness(memory);
+        if (
+          readiness.fieldCount > 0
+          && memory.confidence >= agentConfig.confidenceThreshold
+          && readiness.missingRequiredFields.length === 0
+        ) {
           yield {
             type: 'result',
-            content: `Target confidence reached: ${(memory.confidence || 0).toFixed(2)}`,
+            content: `Target confidence and required coverage reached: ${(memory.confidence || 0).toFixed(2)}`,
             timestamp: Date.now(),
           };
-
-          // Auto-finalize since confidence threshold reached
-          try {
-            const finalizeResult = await executeFunctionCall(
-              {
-                name: 'finalize_extraction',
-                arguments: {
-                  extracted_fields: memory.extractedFields,
-                  overall_confidence: memory.confidence,
-                  extraction_summary: `Successfully extracted ${Object.keys(memory.extractedFields).length} fields with ${(memory.confidence || 0).toFixed(2)} confidence`,
-                  quality_score: memory.confidence,
-                },
-              },
-              fileData,
-              file.type,
-              memory
-            );
-
-            applyMemoryUpdate(memory, finalizeResult.memoryUpdate);
-
-            yield {
-              type: 'result',
-              content: 'Extraction finalized automatically',
-              functionResult: finalizeResult,
-              timestamp: Date.now(),
-            };
-
-            isComplete = true;
-            break;
-          } catch (finalizationError) {
-            yield {
-              type: 'error',
-              content: 'Error during automatic finalization',
-              timestamp: Date.now(),
-            };
-            logger.error('Finalization error:', finalizationError);
-          }
+          isComplete = true;
+          break;
+        } else if (memory.confidence >= agentConfig.confidenceThreshold && readiness.missingRequiredFields.length > 0) {
+          yield {
+            type: 'thinking',
+            content: `Confidence target reached, but required fields are still missing: ${readiness.missingRequiredFields.join(', ')}`,
+            timestamp: Date.now(),
+          };
         }
 
         // Update progress
@@ -252,6 +245,11 @@ export async function* agentLoop(
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Iteration failed';
+        const loweredError = errorMessage.toLowerCase();
+        if (clientConfig.abortSignal?.aborted || loweredError.includes('cancel') || loweredError.includes('abort')) {
+          return memory;
+        }
+
         yield {
           type: 'error',
           content: `Error in iteration ${iteration}: ${errorMessage}`,
@@ -265,6 +263,9 @@ export async function* agentLoop(
       }
 
       // Brief pause between iterations
+      if (clientConfig.abortSignal?.aborted) {
+        return memory;
+      }
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
@@ -287,6 +288,11 @@ export async function* agentLoop(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Agent processing failed';
+    const loweredError = errorMessage.toLowerCase();
+    if (clientConfig.abortSignal?.aborted || loweredError.includes('cancel') || loweredError.includes('abort')) {
+      return memory;
+    }
+
     yield {
       type: 'error',
       content: `Agent processing failed: ${errorMessage}`,

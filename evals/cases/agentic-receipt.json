@@ -1,0 +1,18 @@
+{
+  "id": "agentic-receipt",
+  "mode": "agentic",
+  "inputPath": "evals/corpus/receipt.pdf",
+  "agentConfig": {
+    "maxIterations": 4,
+    "confidenceThreshold": 0.65
+  },
+  "expectedAssertions": [
+    { "type": "json_field_equals", "path": "documentType", "expected": "receipt" },
+    { "type": "json_field_equals", "path": "normalizedFields.total_amount.value", "expected": "16.00" },
+    { "type": "json_field_exists", "path": "normalizedFields.merchant_name.value" },
+    { "type": "json_field_exists", "path": "normalizedFields.payment_method.value" },
+    { "type": "contains", "target": "markdown", "value": "Market Street Grocer" },
+    { "type": "pass_rate_weight", "value": 1 }
+  ],
+  "tags": ["receipt", "agentic", "record"]
+}

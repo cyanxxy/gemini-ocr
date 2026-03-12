@@ -1,0 +1,10 @@
+{
+  "model": "gemini-3-flash-preview",
+  "totalCases": 13,
+  "passCount": 13,
+  "passRate": 1,
+  "weightedScore": 1,
+  "failures": [],
+  "runAt": "2026-03-12T08:39:29.871Z",
+  "status": "success"
+}

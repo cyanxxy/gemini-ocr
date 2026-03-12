@@ -1,3 +1,5 @@
+import type { GeminiModel, ThinkingConfig } from './gemini/types';
+
 /**
  * Types and interfaces for the agentic OCR system
  */
@@ -43,6 +45,17 @@ export interface AgentStep {
 }
 
 /**
+ * Runtime Gemini client configuration required by the agent.
+ * This keeps the core agent loop independent from the UI settings store.
+ */
+export interface AgentClientConfig {
+  apiKey: string;
+  model: GeminiModel;
+  thinkingConfig?: ThinkingConfig;
+  abortSignal?: AbortSignal;
+}
+
+/**
  * Represents the agent's response to a prompt
  */
 export interface AgentResponse {
@@ -60,7 +73,6 @@ export interface AgentLoopConfig {
   confidenceThreshold: number;
   temperature: number;
   maxTokens: number;
-  model: string;
   enableThinking?: boolean;
 }
 
@@ -107,7 +119,7 @@ export type StepCallback = (step: AgentStep) => void;
 export interface AgentTurnResult {
   /** Conversation history to carry forward (includes all model/tool exchanges) */
   updatedContents: Array<{ role?: string; parts?: unknown[] }>;
-  /** True if finalize_extraction was called during this turn */
+  /** True if the runtime decided the turn has completed extraction */
   finished: boolean;
   /** All steps produced during this turn */
   steps: AgentStep[];

@@ -1,0 +1,15 @@
+{
+  "id": "resume-template",
+  "mode": "template",
+  "inputPath": "evals/corpus/resume.pdf",
+  "presetId": "resume",
+  "expectedAssertions": [
+    { "type": "contains", "target": "markdown", "value": "Senior Product Designer" },
+    { "type": "json_field_equals", "path": "fields.full_name.value", "expected": "Jordan Lee" },
+    { "type": "json_field_equals", "path": "fields.email.value", "expected": "jordan@example.com" },
+    { "type": "json_field_exists", "path": "fields.skills.value" },
+    { "type": "not_contains", "target": "markdown", "value": "undefined" },
+    { "type": "pass_rate_weight", "value": 1.5 }
+  ],
+  "tags": ["resume", "template", "record"]
+}

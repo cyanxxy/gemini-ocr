@@ -1,0 +1,14 @@
+{
+  "id": "receipt-template",
+  "mode": "template",
+  "inputPath": "evals/corpus/receipt.pdf",
+  "presetId": "receipt",
+  "expectedAssertions": [
+    { "type": "contains", "target": "markdown", "value": "Market Street Grocer" },
+    { "type": "json_field_equals", "path": "fields.receipt_number.value", "expected": "R-44219" },
+    { "type": "json_field_equals", "path": "fields.total.value", "expected": "16.00" },
+    { "type": "table_min_rows", "minRows": 3 },
+    { "type": "pass_rate_weight", "value": 2 }
+  ],
+  "tags": ["receipt", "template", "table"]
+}

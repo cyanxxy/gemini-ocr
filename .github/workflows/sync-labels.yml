@@ -1,0 +1,69 @@
+name: Sync Labels
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - .github/labels.json
+      - .github/workflows/sync-labels.yml
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync-labels:
+    name: Sync Repository Labels
+    runs-on: ubuntu-latest
+    if: github.repository == 'cyanxxy/open-Gemini-ocr'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sync labels from config
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+
+            const labels = JSON.parse(fs.readFileSync('.github/labels.json', 'utf8'));
+            const { owner, repo } = context.repo;
+            const existing = await github.paginate(github.rest.issues.listLabelsForRepo, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const existingByName = new Map(existing.map((label) => [label.name, label]));
+
+            for (const label of labels) {
+              const current = existingByName.get(label.name);
+
+              if (!current) {
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name: label.name,
+                  color: label.color,
+                  description: label.description,
+                });
+                core.info(`Created label: ${label.name}`);
+                continue;
+              }
+
+              if (current.color.toLowerCase() !== label.color.toLowerCase() || (current.description || '') !== label.description) {
+                await github.rest.issues.updateLabel({
+                  owner,
+                  repo,
+                  current_name: label.name,
+                  name: label.name,
+                  color: label.color,
+                  description: label.description,
+                });
+                core.info(`Updated label: ${label.name}`);
+                continue;
+              }
+
+              core.info(`Label already up to date: ${label.name}`);
+            }

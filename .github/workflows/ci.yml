@@ -15,6 +15,8 @@ jobs:
   quality:
     name: Code Quality & Tests
     runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     strategy:
       matrix:
@@ -44,11 +46,14 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:coverage
 
+      - name: Validate AI eval fixtures
+        run: npm run evals:validate
+
       - name: Upload coverage to Codecov
-        if: ${{ !github.event.pull_request.head.repo.fork && secrets.CODECOV_TOKEN != '' }}
+        if: ${{ env.CODECOV_TOKEN != '' && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
         uses: codecov/codecov-action@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
           flags: unittests
           name: codecov-umbrella

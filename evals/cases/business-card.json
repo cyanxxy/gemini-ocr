@@ -1,0 +1,14 @@
+{
+  "id": "business-card-template",
+  "mode": "template",
+  "inputPath": "evals/corpus/business-card.pdf",
+  "presetId": "business-card",
+  "expectedAssertions": [
+    { "type": "contains", "target": "markdown", "value": "Orbit Partners" },
+    { "type": "json_field_equals", "path": "fields.full_name.value", "expected": "Nina Patel" },
+    { "type": "json_field_equals", "path": "fields.company.value", "expected": "Orbit Partners" },
+    { "type": "json_field_exists", "path": "fields.website.value" },
+    { "type": "pass_rate_weight", "value": 1.5 }
+  ],
+  "tags": ["business-card", "template", "record"]
+}

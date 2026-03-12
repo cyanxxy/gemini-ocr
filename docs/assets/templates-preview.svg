@@ -1,0 +1,38 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Templates Preview</title>
+  <desc id="desc">Preview of template selection, source document, and artifact tabs.</desc>
+  <rect width="1200" height="720" fill="#F5F5F4"/>
+  <rect x="40" y="40" width="1120" height="640" rx="28" fill="#FBFAF9" stroke="#D6D3D1" stroke-width="2"/>
+  <rect x="80" y="100" width="300" height="540" rx="24" fill="#FFFFFF" stroke="#D6D3D1" stroke-width="2"/>
+  <text x="112" y="150" fill="#1C1917" font-family="Georgia, serif" font-size="32" font-weight="700">Preset</text>
+  <rect x="112" y="188" width="236" height="64" rx="18" fill="#1C1917"/>
+  <text x="140" y="228" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="22" font-weight="700">Invoice</text>
+  <rect x="112" y="268" width="236" height="64" rx="18" fill="#FFFFFF" stroke="#D6D3D1" stroke-width="2"/>
+  <text x="140" y="308" fill="#1C1917" font-family="Arial, sans-serif" font-size="22" font-weight="700">Receipt</text>
+  <rect x="112" y="348" width="236" height="64" rx="18" fill="#FFFFFF" stroke="#D6D3D1" stroke-width="2"/>
+  <text x="140" y="388" fill="#1C1917" font-family="Arial, sans-serif" font-size="22" font-weight="700">Resume</text>
+  <rect x="112" y="444" width="236" height="156" rx="22" fill="#FAFAF9" stroke="#E7E5E4" stroke-width="2"/>
+  <text x="138" y="486" fill="#1C1917" font-family="Arial, sans-serif" font-size="20" font-weight="700">Source document</text>
+  <rect x="138" y="510" width="184" height="12" rx="6" fill="#A8A29E"/>
+  <rect x="138" y="536" width="184" height="12" rx="6" fill="#A8A29E"/>
+  <rect x="138" y="562" width="152" height="12" rx="6" fill="#A8A29E"/>
+  <rect x="420" y="100" width="700" height="540" rx="24" fill="#FFFFFF" stroke="#D6D3D1" stroke-width="2"/>
+  <text x="456" y="150" fill="#1C1917" font-family="Georgia, serif" font-size="32" font-weight="700">Artifacts</text>
+  <rect x="456" y="186" width="120" height="48" rx="14" fill="#1C1917"/>
+  <text x="486" y="217" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="18" font-weight="700">Markdown</text>
+  <rect x="592" y="186" width="100" height="48" rx="14" fill="#FFFFFF" stroke="#D6D3D1" stroke-width="2"/>
+  <text x="625" y="217" fill="#1C1917" font-family="Arial, sans-serif" font-size="18" font-weight="700">JSON</text>
+  <rect x="708" y="186" width="88" height="48" rx="14" fill="#FFFFFF" stroke="#D6D3D1" stroke-width="2"/>
+  <text x="736" y="217" fill="#1C1917" font-family="Arial, sans-serif" font-size="18" font-weight="700">CSV</text>
+  <rect x="456" y="264" width="628" height="320" rx="20" fill="#1C1917"/>
+  <text x="492" y="320" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="30" font-weight="700">Invoice Extraction</text>
+  <rect x="492" y="354" width="552" height="12" rx="6" fill="#57534E"/>
+  <rect x="492" y="382" width="552" height="12" rx="6" fill="#57534E"/>
+  <rect x="492" y="410" width="486" height="12" rx="6" fill="#57534E"/>
+  <rect x="492" y="454" width="552" height="96" rx="18" fill="#292524"/>
+  <rect x="516" y="478" width="96" height="10" rx="5" fill="#E7E5E4"/>
+  <rect x="640" y="478" width="84" height="10" rx="5" fill="#E7E5E4"/>
+  <rect x="752" y="478" width="86" height="10" rx="5" fill="#E7E5E4"/>
+  <rect x="866" y="478" width="120" height="10" rx="5" fill="#E7E5E4"/>
+  <rect x="516" y="512" width="470" height="10" rx="5" fill="#A8A29E"/>
+</svg>

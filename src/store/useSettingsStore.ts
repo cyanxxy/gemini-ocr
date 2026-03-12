@@ -2,34 +2,20 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { encryptData, decryptData } from '../lib/crypto';
 import { logger } from '../lib/logger';
-import type { ThinkingLevel } from '../lib/gemini/types';
+import type { GeminiModel, ThinkingConfig, ThinkingLevel } from '../lib/gemini/types';
 
-// Re-export ThinkingLevel for convenience
-export type { ThinkingLevel };
+// Re-export shared Gemini config types for convenience
+export type { GeminiModel as ModelType, ThinkingConfig, ThinkingLevel };
 
 /**
  * Defines the available Gemini preview model types that the user can select.
  */
-export type ModelType =
-  | 'gemini-3.1-pro-preview'
-  | 'gemini-3-flash-preview';
+export type ModelType = GeminiModel;
 
 /**
  * Defines the available theme modes for the application.
  */
 export type ThemeMode = 'light' | 'dark' | 'amoled';
-
-/**
- * Thinking mode configuration for Gemini preview models
- * Uses `level` ('MINIMAL'/'LOW'/'MEDIUM'/'HIGH' depending on model support)
- * Note: Thinking isn't fully disabled for Gemini preview models; MINIMAL is the lightest setting
- */
-export interface ThinkingConfig {
-  /** Thinking level - availability depends on the selected model */
-  level: ThinkingLevel;
-  /** Whether to include thinking content in the response */
-  includeThoughts?: boolean;
-}
 
 /**
  * Defines the state and actions for managing application settings.

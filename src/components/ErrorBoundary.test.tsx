@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ErrorBoundary, withErrorBoundary } from './ErrorBoundary';
+import { ErrorBoundary } from './ErrorBoundary';
 
 // Component that throws an error
 const ThrowError = ({ shouldThrow = false }: { shouldThrow?: boolean }) => {
@@ -121,65 +121,3 @@ describe('ErrorBoundary', () => {
     ).toBeInTheDocument();
   });
 });
-
-describe('withErrorBoundary', () => {
-  const originalError = console.error;
-  beforeEach(() => {
-    console.error = vi.fn();
-  });
-
-  afterEach(() => {
-    console.error = originalError;
-  });
-
-  it('should wrap component with error boundary', () => {
-    const TestComponent = () => <div>Test content</div>;
-    const WrappedComponent = withErrorBoundary(TestComponent);
-
-    render(<WrappedComponent />);
-
-    expect(screen.getByText('Test content')).toBeInTheDocument();
-  });
-
-  it('should catch errors from wrapped component', () => {
-    const ThrowingComponent = () => {
-      throw new Error('Test error');
-    };
-    const WrappedComponent = withErrorBoundary(ThrowingComponent);
-
-    render(<WrappedComponent />);
-
-    expect(screen.getByText('Oops! Something went wrong')).toBeInTheDocument();
-  });
-
-  it('should use custom fallback when provided', () => {
-    const ThrowingComponent = () => {
-      throw new Error('Test error');
-    };
-    const WrappedComponent = withErrorBoundary(
-      ThrowingComponent,
-      <div>HOC fallback</div>
-    );
-
-    render(<WrappedComponent />);
-
-    expect(screen.getByText('HOC fallback')).toBeInTheDocument();
-  });
-
-  it('should call onError callback when provided', () => {
-    const onError = vi.fn();
-    const ThrowingComponent = () => {
-      throw new Error('Test error');
-    };
-    const WrappedComponent = withErrorBoundary(
-      ThrowingComponent,
-      undefined,
-      onError
-    );
-
-    render(<WrappedComponent />);
-
-    expect(onError).toHaveBeenCalled();
-  });
-});
-

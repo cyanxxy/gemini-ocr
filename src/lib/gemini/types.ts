@@ -108,6 +108,82 @@ export interface ExtractionRule {
 }
 
 /**
+ * Structured extraction presets built on top of OCR rules.
+ */
+export interface ExtractionPreset {
+  /** Stable preset identifier used across UI, evals, and reports. */
+  id: string;
+  /** Human-readable preset label shown in the UI. */
+  label: string;
+  /** Short description of the preset's intended use case. */
+  description: string;
+  /** Extraction rules that should be applied for this preset. */
+  rules: ExtractionRule[];
+  /** Whether the preset is primarily record-like or table-like. */
+  outputShape: 'record' | 'table';
+  /** Optional table columns for presets that should emit CSV rows. */
+  tableColumns?: string[];
+}
+
+/**
+ * Single extracted field in a preset result.
+ */
+export interface PresetExtractedField {
+  /** Field type inherited from the preset rule. */
+  type: ExtractionRule['type'];
+  /** Extracted value or null when the field could not be found. */
+  value: string | number | boolean | string[] | null;
+  /** Model confidence score between 0 and 1. */
+  confidence: number;
+  /** Whether the field is required by the preset. */
+  required: boolean;
+}
+
+/**
+ * Normalized structured output returned by preset extraction.
+ */
+export interface PresetStructuredOutput {
+  /** The preset identifier used to extract this result. */
+  presetId: string;
+  /** The document type interpreted by the model. */
+  documentType: string;
+  /** Short model-generated summary of the extracted document. */
+  summary: string;
+  /** Extracted fields keyed by rule id. */
+  fields: Record<string, PresetExtractedField>;
+  /** Optional tabular rows for CSV export. */
+  rows?: Array<Record<string, string>>;
+  /** Extraction warnings or caveats. */
+  warnings?: string[];
+}
+
+/**
+ * Final artifact bundle returned by a preset extraction run.
+ */
+export interface PresetRunResult {
+  /** The preset identifier used to produce these artifacts. */
+  presetId: string;
+  /** Human-readable markdown summary for display and copy actions. */
+  markdown: string;
+  /** Normalized machine-readable structured output. */
+  json: PresetStructuredOutput;
+  /** Optional CSV artifact for table-shaped presets. */
+  csv?: string;
+}
+
+/**
+ * Callbacks for template/preset extraction operations.
+ */
+export interface PresetStreamingCallbacks {
+  /** Called for each streamed chunk of model output. */
+  onProgress?: (chunk: string) => void;
+  /** Called when a preset run completes successfully. */
+  onComplete?: (result: PresetRunResult) => void;
+  /** Called if the preset extraction fails. */
+  onError?: (error: Error) => void;
+}
+
+/**
  * Available Gemini preview models
  */
 export type GeminiModel =

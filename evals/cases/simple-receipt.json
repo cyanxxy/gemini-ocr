@@ -1,0 +1,12 @@
+{
+  "id": "simple-receipt",
+  "mode": "simple",
+  "inputPath": "evals/corpus/receipt.pdf",
+  "expectedAssertions": [
+    { "type": "contains", "target": "markdown", "value": "Market Street Grocer" },
+    { "type": "contains", "target": "markdown", "value": "Receipt" },
+    { "type": "contains", "target": "markdown", "value": "16.00" },
+    { "type": "pass_rate_weight", "value": 1 }
+  ],
+  "tags": ["receipt", "simple", "markdown"]
+}

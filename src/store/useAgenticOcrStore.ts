@@ -278,17 +278,26 @@ export const useAgenticOcrStore = create<AgenticOcrState>((set, get) => ({
       // Import agent loop dynamically to avoid circular dependencies
       const { agentLoop } = await import('../lib/agentLoop');
 
-      const { model: userModel } = useSettingsStore.getState();
+      const { apiKey, model: userModel, thinkingConfig } = useSettingsStore.getState();
+
+      if (!apiKey) {
+        throw new Error('Please set your API key in settings');
+      }
 
       const generator = agentLoop(
         file,
         fileData,
         {
+          apiKey,
+          model: userModel,
+          thinkingConfig,
+          abortSignal: abortController.signal,
+        },
+        {
           maxIterations: config.maxIterations,
           confidenceThreshold: config.confidenceThreshold,
-          temperature: 1.0, // Gemini 3 defaults to temperature 1.0
+          temperature: 1,
           maxTokens: 4096,
-          model: userModel,
           // Thinking is controlled by global settings, not per-agent config
         },
         (progress: number, message: string) => {
@@ -421,8 +430,13 @@ export const useAgenticOcrStore = create<AgenticOcrState>((set, get) => ({
       });
 
     } catch (error) {
-      logger.error('Agent processing error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Agent processing failed';
+      if (abortController.signal.aborted || errorMessage.toLowerCase().includes('abort') || errorMessage.toLowerCase().includes('cancel')) {
+        logger.info('Agent processing cancelled');
+        return;
+      }
+
+      logger.error('Agent processing error:', error);
       set({
         status: 'error',
         currentStep: 'Processing failed',
