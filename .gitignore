@@ -30,6 +30,11 @@ CLAUDE.md
 AGENTS.md
 *.jsonl
 
+# Internal notes and local benchmark artifacts
+ROADMAP.md
+docs/2026-agentic-ocr-evals-plan.md
+evals/reports/ocrbench-v2-subset/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

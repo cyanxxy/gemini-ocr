@@ -19,7 +19,6 @@ Open-source OCR web app for extracting text and structured data from images, PDF
 
 - **Deploy your own live copy**: use the Netlify or Vercel buttons above
 - **Latest AI eval report**: [evals/reports/latest.md](evals/reports/latest.md)
-- **Roadmap**: [ROADMAP.md](ROADMAP.md)
 - **Contributing guide**: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Why This Repo Is Different
@@ -224,7 +223,6 @@ Contributions are welcome. Useful places to start:
 Read:
 
 - [CONTRIBUTING.md](CONTRIBUTING.md)
-- [ROADMAP.md](ROADMAP.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - [SECURITY.md](SECURITY.md)
 
