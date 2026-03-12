@@ -74,6 +74,24 @@ describe('useSettingsStore', () => {
       expect(useSettingsStore.getState().model).toBe('gemini-3.1-pro-preview');
     });
 
+    it('clamps unsupported thinking levels when switching models', () => {
+      useSettingsStore.setState({
+        model: 'gemini-3-flash-preview',
+        thinkingConfig: {
+          level: 'MINIMAL',
+          includeThoughts: true,
+        },
+      });
+
+      useSettingsStore.getState().setModel('gemini-3.1-pro-preview');
+
+      expect(useSettingsStore.getState().model).toBe('gemini-3.1-pro-preview');
+      expect(useSettingsStore.getState().thinkingConfig).toEqual({
+        level: 'HIGH',
+        includeThoughts: true,
+      });
+    });
+
     it('ignores invalid model values', () => {
       const current = useSettingsStore.getState().model;
       // @ts-expect-error - testing invalid input

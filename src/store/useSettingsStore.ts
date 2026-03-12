@@ -17,6 +17,29 @@ export type ModelType = GeminiModel;
  */
 export type ThemeMode = 'light' | 'dark' | 'amoled';
 
+const VALID_MODELS: ModelType[] = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview'];
+const VALID_THEMES: ThemeMode[] = ['light', 'dark', 'amoled'];
+
+function normalizeThinkingConfigForModel(
+  model: ModelType,
+  thinkingConfig: ThinkingConfig,
+): ThinkingConfig {
+  const allowedLevels: ThinkingLevel[] = model === 'gemini-3-flash-preview'
+    ? ['MINIMAL', 'LOW', 'MEDIUM', 'HIGH']
+    : ['LOW', 'MEDIUM', 'HIGH'];
+  const rawLevel = typeof thinkingConfig.level === 'string'
+    ? thinkingConfig.level.toUpperCase()
+    : thinkingConfig.level;
+
+  return {
+    ...thinkingConfig,
+    level: allowedLevels.includes(rawLevel as ThinkingLevel)
+      ? (rawLevel as ThinkingLevel)
+      : 'HIGH',
+    includeThoughts: Boolean(thinkingConfig.includeThoughts),
+  };
+}
+
 /**
  * Defines the state and actions for managing application settings.
  * This includes user preferences like API key, AI model, theme,
@@ -105,38 +128,28 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
       setModel: (model: ModelType) => {
-        const validModels: ModelType[] = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview'];
-        if (validModels.includes(model)) {
-          set({ model });
+        if (!VALID_MODELS.includes(model)) {
+          return;
         }
+
+        set((state) => ({
+          model,
+          thinkingConfig: normalizeThinkingConfigForModel(model, state.thinkingConfig),
+        }));
       },
       setHandwritingMode: (enabled: boolean) => set({ handwritingMode: enabled }),
       setTheme: (theme: ThemeMode) => {
-        const validThemes: ThemeMode[] = ['light', 'dark', 'amoled'];
-        if (!validThemes.includes(theme)) return;
+        if (!VALID_THEMES.includes(theme)) return;
         document.documentElement.classList.remove('light', 'dark', 'amoled');
         document.documentElement.classList.add(theme);
         set({ theme });
       },
       updateThinkingConfig: (config) => set((state) => {
-        const isFlash = state.model === 'gemini-3-flash-preview';
-        const allowed: ThinkingLevel[] = isFlash
-          ? ['MINIMAL', 'LOW', 'MEDIUM', 'HIGH']
-          : ['LOW', 'MEDIUM', 'HIGH'];
-        const rawLevel = config.level ?? state.thinkingConfig.level;
-        const normalized = typeof rawLevel === 'string'
-          ? rawLevel.toUpperCase()
-          : rawLevel;
-        const level = (allowed as readonly string[]).includes(normalized)
-          ? (normalized as ThinkingLevel)
-          : 'HIGH';
-
         return {
-          thinkingConfig: {
+          thinkingConfig: normalizeThinkingConfigForModel(state.model, {
             ...state.thinkingConfig,
             ...config,
-            level,
-          },
+          }),
         };
       }),
     }),
@@ -159,21 +172,18 @@ export const useSettingsStore = create<SettingsState>()(
 
           try {
             // Validate and clean up the rehydrated state
-            const validModels: ModelType[] = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview'];
-            const validThemes: ThemeMode[] = ['light', 'dark', 'amoled'];
-
             // Validate model - migrate legacy Gemini 3 Pro to Gemini 3.1 Pro
             if (state.model === 'gemini-3-pro-preview') {
               state.model = 'gemini-3.1-pro-preview';
             }
 
             // Validate model - migrate unknown models to Gemini 3 Flash
-            if (!validModels.includes(state.model)) {
+            if (!VALID_MODELS.includes(state.model)) {
               state.model = 'gemini-3-flash-preview';
             }
 
             // Validate theme
-            if (!validThemes.includes(state.theme)) {
+            if (!VALID_THEMES.includes(state.theme)) {
               state.theme = 'light';
             }
 
@@ -182,42 +192,13 @@ export const useSettingsStore = create<SettingsState>()(
               state.handwritingMode = false;
             }
 
-            // Validate thinking configuration levels
-            const validLevels: ThinkingLevel[] = ['MINIMAL', 'LOW', 'MEDIUM', 'HIGH'];
             if (!state.thinkingConfig || typeof state.thinkingConfig !== 'object') {
               state.thinkingConfig = {
                 level: 'HIGH',
                 includeThoughts: false,
               };
             } else {
-              // Migrate old lowercase/invalid values to valid levels
-              const currentLevel = state.thinkingConfig.level?.toUpperCase() as ThinkingLevel;
-              if (!currentLevel || !validLevels.includes(currentLevel)) {
-                // Map old values to new valid values
-                const oldLevel = state.thinkingConfig.level?.toLowerCase();
-                if (oldLevel === 'minimal') {
-                  state.thinkingConfig.level = 'MINIMAL';
-                } else if (oldLevel === 'low') {
-                  state.thinkingConfig.level = 'LOW';
-                } else if (oldLevel === 'medium') {
-                  state.thinkingConfig.level = 'MEDIUM';
-                } else {
-                  // 'high' or any invalid value defaults to 'HIGH'
-                  state.thinkingConfig.level = 'HIGH';
-                }
-              } else {
-                state.thinkingConfig.level = currentLevel;
-              }
-              // Ensure includeThoughts exists
-              if (typeof state.thinkingConfig.includeThoughts !== 'boolean') {
-                state.thinkingConfig.includeThoughts = false;
-              }
-            }
-
-            // Clamp thinking level based on selected model
-            if (state.model === 'gemini-3.1-pro-preview' &&
-                state.thinkingConfig.level === 'MINIMAL') {
-              state.thinkingConfig.level = 'HIGH';
+              state.thinkingConfig = normalizeThinkingConfigForModel(state.model, state.thinkingConfig);
             }
 
             // Restore theme

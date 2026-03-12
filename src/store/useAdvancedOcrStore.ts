@@ -204,6 +204,7 @@ export const useAdvancedOcrStore = create<AdvancedOcrState>((set, get) => ({
 
     const resultsAccumulator: ProcessedResult[] = [];
     let failedCount = 0;
+    let wasCancelled = false;
 
     for (const trackedFile of files) {
       // Check if processing was cancelled
@@ -227,6 +228,13 @@ export const useAdvancedOcrStore = create<AdvancedOcrState>((set, get) => ({
           content
         });
       } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const loweredError = errorMessage.toLowerCase();
+        if (abortController.signal.aborted || loweredError.includes('cancel') || loweredError.includes('abort')) {
+          wasCancelled = true;
+          break;
+        }
+
         logger.error(`Error processing file ${trackedFile.file.name}:`, error);
         failedCount++;
         resultsAccumulator.push({
@@ -234,11 +242,9 @@ export const useAdvancedOcrStore = create<AdvancedOcrState>((set, get) => ({
           fileName: trackedFile.file.name,
           content: {
             sections: [],
-            content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+            content: `Error: ${errorMessage}`
           }
         });
-        // If the entire batch was cancelled, stop processing
-        if (abortController.signal.aborted) break;
       }
 
       // Update state incrementally so user sees results as they come in
@@ -248,7 +254,11 @@ export const useAdvancedOcrStore = create<AdvancedOcrState>((set, get) => ({
     set({
       isProcessing: false,
       abortController: null,
-      error: failedCount > 0 ? `${failedCount} of ${files.length} files failed to process` : null
+      error: wasCancelled
+        ? 'Processing cancelled'
+        : failedCount > 0
+          ? `${failedCount} of ${files.length} files failed to process`
+          : null
     });
   },
 
