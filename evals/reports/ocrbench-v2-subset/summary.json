@@ -1,0 +1,36 @@
+{
+  "model": "gemini-3.1-pro-preview",
+  "totalCases": 200,
+  "runtime": {
+    "totalLatencyMs": 1235543,
+    "averageLatencyMs": 6177.715,
+    "promptTokens": 231701,
+    "candidateTokens": 87211,
+    "totalTokens": 321824,
+    "averageTotalTokens": 1609.12
+  },
+  "scores": {
+    "overallWeightedAverage": 0.6184780610709434,
+    "englishOverallCategoryAverage": 0.59524839076826,
+    "byType": {
+      "key information extraction en": {
+        "count": 80,
+        "averageScore": 0.8275450937950938,
+        "averageLatencyMs": 3380.7,
+        "averageTotalTokens": 1348.9375
+      },
+      "document parsing en": {
+        "count": 60,
+        "averageScore": 0.18320782647826156,
+        "averageLatencyMs": 9135.2,
+        "averageTotalTokens": 1887.8833333333334
+      },
+      "full-page OCR en": {
+        "count": 60,
+        "averageScore": 0.7749922520314246,
+        "averageLatencyMs": 6949.583333333333,
+        "averageTotalTokens": 1677.2666666666667
+      }
+    }
+  }
+}

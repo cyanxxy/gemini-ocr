@@ -1,5 +1,7 @@
 # Roadmap
 
+For the deeper 2026 expansion track around provenance, agent scoreboards, DocVQA-style evals, robustness slices, ablations, and public leaderboards, see [docs/2026-agentic-ocr-evals-plan.md](docs/2026-agentic-ocr-evals-plan.md).
+
 ## Release 1.1 - Templates And Eval Foundations
 
 - Ship the new Templates workflow for invoice, receipt, resume, and business card extraction.

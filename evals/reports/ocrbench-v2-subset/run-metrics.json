@@ -1,0 +1,12 @@
+{
+  "totalCases": 200,
+  "failures": 0,
+  "totalLatencyMs": 1235543,
+  "promptTokens": 231701,
+  "candidateTokens": 87211,
+  "totalTokens": 321824,
+  "averageLatencyMs": 6177.715,
+  "averageTotalTokens": 1609.12,
+  "model": "gemini-3.1-pro-preview",
+  "completedAt": "2026-03-12T19:10:37.955Z"
+}
